@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+}
+
+body {
+  background-color: #000000;
+  color: #ffffff;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui;
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #000000;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
+
+/* Glassmorphic utilities */
+.glass-panel {
+  background: rgba(9, 9, 11, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(39, 39, 42, 0.6);
+}

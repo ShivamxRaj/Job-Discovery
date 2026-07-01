@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Python envs and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+ENV/
+env/
+*.db
+*.sqlite
+
+# Next.js
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# User files and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# OS files
+.DS_Store
+Thumbs.db
+*.pem
+
+# IDEs
+.vscode/
+.idea/
+
+# Tool specific
+.gemini/
+/artifacts/
