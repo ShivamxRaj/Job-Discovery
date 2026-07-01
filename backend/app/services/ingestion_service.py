@@ -38,34 +38,53 @@ class IngestionService:
             duplicate_count = 0
             
             for rj in raw_jobs:
-                # Deduplicate by URL in raw_jobs table to avoid duplicate queue items
-                exists_query = select(RawJob.id).where(RawJob.url == rj.url)
-                exists_res = await db.execute(exists_query)
-                if exists_res.scalar_one_or_none() is not None:
-                    duplicate_count += 1
-                    continue
-                
-                # Create database record for the raw job
-                raw_job_db = RawJob(
-                    source=name,
-                    source_job_id=rj.source_job_id,
-                    url=rj.url,
-                    title=rj.title,
-                    company_name=rj.company_name,
-                    description=rj.description,
-                    location=rj.location,
-                    job_type=rj.job_type,
-                    is_remote=rj.is_remote,
-                    company_logo=rj.company_logo,
-                    company_website=rj.company_website,
-                    salary_min=rj.salary_min,
-                    salary_max=rj.salary_max,
-                    currency=rj.currency or "USD",
-                    skills=rj.skills or [],
-                    status="PENDING"
+                # Find existing raw job by (source + source_job_id) OR by url
+                exists_query = select(RawJob).where(
+                    ((RawJob.source == name) & (RawJob.source_job_id == rj.source_job_id) & (RawJob.source_job_id.is_not(None))) |
+                    (RawJob.url == rj.url)
                 )
-                db.add(raw_job_db)
-                added_count += 1
+                exists_res = await db.execute(exists_query)
+                existing_raw = exists_res.scalar_one_or_none()
+                
+                if existing_raw:
+                    # Update fields of the existing row instead of inserting a duplicate
+                    existing_raw.title = rj.title
+                    existing_raw.company_name = rj.company_name
+                    existing_raw.description = rj.description
+                    existing_raw.location = rj.location
+                    existing_raw.job_type = rj.job_type
+                    existing_raw.is_remote = rj.is_remote
+                    existing_raw.company_logo = rj.company_logo
+                    existing_raw.company_website = rj.company_website
+                    existing_raw.salary_min = rj.salary_min
+                    existing_raw.salary_max = rj.salary_max
+                    existing_raw.currency = rj.currency or "USD"
+                    existing_raw.skills = rj.skills or []
+                    existing_raw.source_job_id = rj.source_job_id
+                    existing_raw.updated_at = datetime.datetime.now(datetime.timezone.utc)
+                    duplicate_count += 1
+                else:
+                    # Create database record for the raw job
+                    raw_job_db = RawJob(
+                        source=name,
+                        source_job_id=rj.source_job_id,
+                        url=rj.url,
+                        title=rj.title,
+                        company_name=rj.company_name,
+                        description=rj.description,
+                        location=rj.location,
+                        job_type=rj.job_type,
+                        is_remote=rj.is_remote,
+                        company_logo=rj.company_logo,
+                        company_website=rj.company_website,
+                        salary_min=rj.salary_min,
+                        salary_max=rj.salary_max,
+                        currency=rj.currency or "USD",
+                        skills=rj.skills or [],
+                        status="PENDING"
+                    )
+                    db.add(raw_job_db)
+                    added_count += 1
             
             await db.commit()
             duration_ms = int((time.perf_counter() - start_time) * 1000)
@@ -83,7 +102,7 @@ class IngestionService:
     async def ingest_from_all_connectors(self, db: AsyncSession, limit_per_connector: int = 15) -> Dict[str, Any]:
         """
         Trigger job ingestion from all registered connectors.
-        Fills the raw_jobs queue while deduplicating by URL at the raw stage.
+        Fills the raw_jobs queue while updating duplicates at the raw stage.
         """
         results = {}
         for connector in connectors_registry:

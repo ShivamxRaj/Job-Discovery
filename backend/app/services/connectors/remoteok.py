@@ -1,5 +1,6 @@
 import httpx
 import datetime
+import hashlib
 from typing import List, Tuple
 from app.services.connectors.base import BaseConnector, retry_on_http_failure
 from app.schemas.schemas import RawJobData
@@ -37,6 +38,13 @@ class RemoteOKConnector(BaseConnector):
             jobs = []
             
             for item in raw_items[:limit]:
+                # Extract official job ID, fallback to deterministic fingerprint if unavailable
+                source_job_id = str(item.get("id")) if item.get("id") else None
+                if not source_job_id:
+                    # Generate deterministic fingerprint based on URL, company, and title
+                    hash_input = f"{item.get('url', '')}-{item.get('company', '')}-{item.get('position', '')}".encode("utf-8")
+                    source_job_id = "ro-" + hashlib.sha256(hash_input).hexdigest()[:12]
+
                 # Extract date
                 created_at = None
                 date_val = item.get("date")
@@ -53,7 +61,7 @@ class RemoteOKConnector(BaseConnector):
 
                 # Map to RawJobData
                 job_data = RawJobData(
-                    source_job_id=str(item.get("id")) if item.get("id") else None,
+                    source_job_id=source_job_id,
                     title=item.get("position", "Untitled Position"),
                     company_name=item.get("company", "Unknown Company"),
                     description=item.get("description", ""),
