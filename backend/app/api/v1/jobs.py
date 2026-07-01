@@ -119,3 +119,19 @@ async def get_ingestion_health(
     """Check connection health for all job ingestion connectors"""
     health_status = await ingestion_service.check_connectors_health()
     return health_status
+
+@router.post("/sync/{source}", status_code=status.HTTP_200_OK)
+async def sync_connector_source(
+    source: str,
+    limit: int = 15,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Sync jobs from a specific source/connector directly into the raw_jobs staging queue"""
+    try:
+        summary = await ingestion_service.ingest_from_connector(db, source, limit)
+        return summary
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Sync failed: {str(e)}")

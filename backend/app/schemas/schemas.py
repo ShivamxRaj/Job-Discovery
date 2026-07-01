@@ -249,6 +249,7 @@ class RawJobData(BaseModel):
     Intermediate schema representing raw job postings before normalization/deduplication.
     All connectors MUST map their API responses into this schema.
     """
+    source_job_id: Optional[str] = Field(None, description="Unique job ID from the source board")
     title: str = Field(..., description="Raw position/job title")
     company_name: str = Field(..., description="Raw company name")
     description: str = Field(..., description="Raw job description (HTML or plain text)")

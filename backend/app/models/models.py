@@ -399,6 +399,7 @@ class RawJob(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     source: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    source_job_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
     url: Mapped[str] = mapped_column(String(512), unique=True, index=True, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
