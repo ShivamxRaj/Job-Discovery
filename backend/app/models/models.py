@@ -391,3 +391,29 @@ class CleanupJob(Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+# 24. Raw Jobs Model (Ingestion Queue)
+class RawJob(Base):
+    __tablename__ = "raw_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    source: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    url: Mapped[str] = mapped_column(String(512), unique=True, index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    job_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    is_remote: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    company_logo: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    company_website: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    salary_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    salary_max: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    currency: Mapped[Optional[str]] = mapped_column(String(10), default="USD")
+    skills: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING", index=True)  # 'PENDING', 'PROCESSED', 'FAILED'
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+

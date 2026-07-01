@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     # OpenAI API
     OPENAI_API_KEY: Optional[str] = None
 
+    # Job Connectors Settings
+    ADZUNA_APP_ID: Optional[str] = None
+    ADZUNA_APP_KEY: Optional[str] = None
+    
+    # Configurable company job boards list for Greenhouse and Lever V1
+    GREENHOUSE_COMPANIES: List[str] = ["figma", "stripe", "openai", "cloudflare", "lever"]
+    LEVER_COMPANIES: List[str] = ["vercel", "figma", "stripe", "openai"]
+
     # n8n Webhook Settings
     N8N_WEBHOOK_SECRET: Optional[str] = None
 

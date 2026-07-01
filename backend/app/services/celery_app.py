@@ -45,6 +45,10 @@ celery.conf.beat_schedule = {
         "task": "tasks.process_cleanup_jobs",
         "schedule": crontab(minute="0"),
     },
+    "ingest-raw-jobs-daily": {
+        "task": "tasks.ingest_raw_jobs",
+        "schedule": crontab(hour="2", minute="0"), # Daily at 2 AM
+    },
 }
 
 # Helper to run async db queries within Celery sync threads
@@ -231,4 +235,21 @@ def process_cleanup_jobs_task():
 def delete_storage_file_task(job_id: int):
     """Background task to delete a specific storage file by job ID."""
     return run_async_task(delete_storage_file_async(job_id))
+
+
+@celery.task(name="tasks.ingest_raw_jobs", bind=True, max_retries=3, default_retry_delay=300)
+def ingest_raw_jobs_task(self):
+    """Celery task to run all connectors and populate raw_jobs."""
+    from app.db.session import async_session_maker
+    from app.services.ingestion_service import ingestion_service
+    
+    async def run():
+        async with async_session_maker() as db:
+            return await ingestion_service.ingest_from_all_connectors(db)
+    try:
+        return run_async_task(run())
+    except Exception as exc:
+        # Retry on transient errors
+        raise self.retry(exc=exc)
+
 

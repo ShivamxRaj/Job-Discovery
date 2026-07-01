@@ -9,6 +9,7 @@ from app.models.models import User, JobRecommendation, Job
 from app.schemas.schemas import JobRecommendationResponse, JobResponse
 from app.services.matching_service import matching_service
 from app.services.job_service import job_service
+from app.services.ingestion_service import ingestion_service
 from app.repositories.resume import resume_repo
 from app.repositories.application import application_repo
 
@@ -97,6 +98,24 @@ async def trigger_job_ingestion(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Admin/User trigger to ingest and index new jobs from feeds"""
-    count = await job_service.aggregate_jobs_from_remote_apis(db)
-    return {"message": f"Successfully ingested {count} jobs"}
+    """Legacy trigger to ingest and index new jobs from feeds (calls all connectors)"""
+    results = await ingestion_service.ingest_from_all_connectors(db)
+    return {"message": "Ingestion triggered", "results": results}
+
+@router.post("/ingestion/trigger", status_code=status.HTTP_200_OK)
+async def trigger_raw_ingestion(
+    limit_per_connector: int = 15,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Trigger job ingestion from all connectors to populate the raw_jobs queue"""
+    results = await ingestion_service.ingest_from_all_connectors(db, limit_per_connector)
+    return {"message": "Raw ingestion triggered successfully", "results": results}
+
+@router.get("/ingestion/health", status_code=status.HTTP_200_OK)
+async def get_ingestion_health(
+    current_user: User = Depends(get_current_user)
+):
+    """Check connection health for all job ingestion connectors"""
+    health_status = await ingestion_service.check_connectors_health()
+    return health_status

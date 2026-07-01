@@ -240,3 +240,27 @@ class NotificationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- INGESTION CONNECTORS ---
+
+class RawJobData(BaseModel):
+    """
+    Intermediate schema representing raw job postings before normalization/deduplication.
+    All connectors MUST map their API responses into this schema.
+    """
+    title: str = Field(..., description="Raw position/job title")
+    company_name: str = Field(..., description="Raw company name")
+    description: str = Field(..., description="Raw job description (HTML or plain text)")
+    location: Optional[str] = Field(None, description="Raw location string")
+    job_type: Optional[str] = Field(None, description="Raw job type (e.g. Full-time, Contract, etc.)")
+    is_remote: Optional[bool] = Field(None, description="Whether the job is remote")
+    url: str = Field(..., description="Direct link to the job posting/source")
+    company_logo: Optional[str] = Field(None, description="URL of company logo")
+    company_website: Optional[str] = Field(None, description="URL of company website")
+    salary_min: Optional[float] = Field(None, description="Minimum salary")
+    salary_max: Optional[float] = Field(None, description="Maximum salary")
+    currency: Optional[str] = Field("USD", description="Currency of salary")
+    skills: Optional[List[str]] = Field(default_factory=list, description="Tags or skills mentioned")
+    created_at: Optional[datetime.datetime] = Field(None, description="Job creation date/time")
+
