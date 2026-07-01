@@ -102,19 +102,33 @@ class ResumeCertificationSchema(BaseModel):
     issue_date: Optional[datetime.datetime] = None
 
 class ResumeParsedDataResponse(BaseModel):
-    quality_score: float
-    ats_score: float
-    suggestions: List[str]
-    parsed_json: Dict[str, Any]
+    # Scores are Optional — null means score could not be computed; check *_reason
+    quality_score: Optional[float] = None
+    quality_score_reason: Optional[str] = None
+    ats_score: Optional[float] = None
+    ats_score_reason: Optional[str] = None
+    suggestions: List[str] = []
+    parsed_json: Dict[str, Any] = {}
 
     class Config:
         from_attributes = True
+
+
+class EmbeddingMetadataResponse(BaseModel):
+    model: str
+    dimensions: int
+    is_non_null: bool
+    is_non_zero: bool
+    sample_values: List[float]  # first 5 values for verification
+
 
 class ResumeVersionResponse(BaseModel):
     id: int
     resume_id: int
     version_number: int
     file_path: str
+    # 'READY' | 'PENDING_OCR' | 'OCR_FAILED'
+    ocr_status: str = "READY"
     created_at: datetime.datetime
     parsed_data: Optional[ResumeParsedDataResponse] = None
     skills: List[ResumeSkillSchema] = []

@@ -64,4 +64,30 @@ class StorageManager:
             
         return f"/static/{unique_filename}"
 
+    async def delete_file(self, unique_filename: str) -> None:
+        """Delete file from storage (Supabase or local)"""
+        is_production = settings.ENVIRONMENT.lower() in ("production", "staging")
+        
+        if self.supabase_url and self.supabase_key:
+            try:
+                from supabase import create_client, Client
+                supabase: Client = create_client(self.supabase_url, self.supabase_key)
+                
+                # Delete from supabase bucket
+                supabase.storage.from_(self.bucket_name).remove([unique_filename])
+                print(f"Deleted {unique_filename} from Supabase storage")
+            except Exception as e:
+                print(f"Failed to delete {unique_filename} from Supabase storage: {e}")
+                if is_production:
+                    raise e
+        else:
+            # Local storage deletion
+            local_path = os.path.join(self.local_dir, unique_filename)
+            if os.path.exists(local_path):
+                try:
+                    os.remove(local_path)
+                    print(f"Deleted local file at {local_path}")
+                except Exception as e:
+                    print(f"Failed to delete local file {local_path}: {e}")
+
 storage_manager = StorageManager()

@@ -88,6 +88,8 @@ class ResumeVersion(Base):
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)
     file_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 'READY' | 'PENDING_OCR' | 'OCR_FAILED'
+    ocr_status: Mapped[str] = mapped_column(String(20), default="READY", nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
@@ -108,10 +110,16 @@ class ResumeParsedData(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     resume_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("resume_versions.id", ondelete="CASCADE"), unique=True, nullable=False)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
-    parsed_json: Mapped[dict] = mapped_column(JSON, nullable=False)  # Complete parsed profile (Education, Experience details, etc.)
-    quality_score: Mapped[float] = mapped_column(Float, default=0.0)
-    ats_score: Mapped[float] = mapped_column(Float, default=0.0)
-    suggestions: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)  # List of improvement strings
+    parsed_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # Nullable scores — null = could not be computed deterministically
+    quality_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    quality_score_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    ats_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    ats_score_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    suggestions: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
+    # Embedding metadata stored alongside vector
+    embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    embedding_dimensions: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Relationships
     resume_version: Mapped["ResumeVersion"] = relationship("ResumeVersion", back_populates="parsed_data")
