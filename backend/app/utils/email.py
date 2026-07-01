@@ -5,6 +5,11 @@ from app.core.config import settings
 
 async def send_verification_email(email: str, token: str):
     """Send verification email link via SMTP"""
+    # Prevent real email delivery to dummy testing addresses or during tests
+    if settings.ENVIRONMENT == "testing" or email.endswith("@example.com"):
+        print(f"[TEST / DUMMY EMAIL SKIPPED] Verification Email to {email} skipped.")
+        return True
+
     if not (settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD):
         print(f"[SMTP NOT CONFIG] Verification Email token: {token}")
         return False
@@ -43,6 +48,11 @@ async def send_verification_email(email: str, token: str):
 
 async def send_reset_password_email(email: str, token: str):
     """Send password reset email link via SMTP"""
+    # Prevent real email delivery to dummy testing addresses or during tests
+    if settings.ENVIRONMENT == "testing" or email.endswith("@example.com"):
+        print(f"[TEST / DUMMY EMAIL SKIPPED] Password Reset Email to {email} skipped.")
+        return True
+
     if not (settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD):
         print(f"[SMTP NOT CONFIG] Password Reset Email token: {token}")
         return False

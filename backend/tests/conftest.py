@@ -3,6 +3,10 @@ import asyncio
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from app.db.base_class import Base
+from app.core.config import settings
+
+# Force ENVIRONMENT to testing during test runs
+settings.ENVIRONMENT = "testing"
 
 # Use in-memory SQLite for super-fast tests
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
