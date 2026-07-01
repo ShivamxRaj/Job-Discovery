@@ -201,21 +201,21 @@ async def test_upload_rollback_on_openai_failure(mock_openai, mock_storage, clie
     If OpenAI embedding fails, transaction rolls back and uploaded file is deleted.
     """
     mock_storage.upload_file = AsyncMock(return_value="http://fake/resume.txt")
-    mock_storage.delete_file = AsyncMock()
     mock_openai.parse_resume = AsyncMock(return_value=_FAKE_PARSED_JSON)
     mock_openai.get_embedding = AsyncMock(side_effect=RuntimeError("OpenAI unavailable"))
 
     tokens = await _register_and_login(client)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
 
-    res = await client.post(
-        "/api/v1/resumes/upload",
-        files=_make_resume_file(),
-        headers=headers,
-    )
+    with patch("app.services.celery_app.delete_storage_file_task.delay") as mock_delay:
+        res = await client.post(
+            "/api/v1/resumes/upload",
+            files=_make_resume_file(),
+            headers=headers,
+        )
     assert res.status_code == 500, res.text
-    # Storage cleanup must be triggered
-    mock_storage.delete_file.assert_called_once()
+    # Storage cleanup must be triggered asynchronously via Celery
+    mock_delay.assert_called_once()
 
 
 @pytest.mark.asyncio

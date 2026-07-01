@@ -4,7 +4,9 @@ import asyncio
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from typing import Optional
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 
@@ -38,6 +40,10 @@ celery.conf.beat_schedule = {
             minute=settings.WEEKLY_DIGEST_MINUTE,
             day_of_week=settings.WEEKLY_DIGEST_DAY_OF_WEEK
         ),
+    },
+    "retry-failed-cleanups-hourly": {
+        "task": "tasks.process_cleanup_jobs",
+        "schedule": crontab(minute="0"),
     },
 }
 
@@ -139,3 +145,90 @@ def send_weekly_digest_task():
                     emails_sent += 1
             return f"Sent weekly digest to {emails_sent} users."
     return run_async_task(run())
+
+
+async def process_cleanup_jobs_async(db: Optional[AsyncSession] = None) -> str:
+    """Internal async executor for processing pending cleanup jobs."""
+    from app.repositories.cleanup import cleanup_repo
+    from app.utils.storage import storage_manager
+
+    async def run_with_db(session: AsyncSession):
+        jobs = await cleanup_repo.get_pending_jobs(session)
+        if not jobs:
+            return "No pending cleanup jobs found."
+
+        processed = 0
+        for job in jobs:
+            # Extract variables before database commit to prevent lazy-load expiration issues
+            file_path = job.file_path
+            job_id = job.id
+
+            # Mark as processing
+            job.status = "PROCESSING"
+            session.add(job)
+            await session.commit()
+
+            try:
+                # Execute actual deletion from storage
+                await storage_manager.delete_file(file_path)
+                await cleanup_repo.mark_success(session, job_id=job_id)
+                processed += 1
+            except Exception as e:
+                await cleanup_repo.mark_failed(session, job_id=job_id, error_message=str(e))
+            
+            await session.commit()
+
+        return f"Processed {len(jobs)} cleanup jobs (Successes: {processed})."
+
+    if db is not None:
+        return await run_with_db(db)
+    else:
+        from app.db.session import async_session_maker
+        async with async_session_maker() as session:
+            return await run_with_db(session)
+
+
+async def delete_storage_file_async(job_id: int, db: Optional[AsyncSession] = None) -> str:
+    """Internal async executor for deleting a specific storage file."""
+    from app.repositories.cleanup import cleanup_repo
+    from app.utils.storage import storage_manager
+
+    async def run_with_db(session: AsyncSession):
+        job = await cleanup_repo.get(session, job_id)
+        if not job or job.status == "SUCCESS":
+            return f"Job {job_id} not found or already success."
+        
+        file_path = job.file_path
+        
+        job.status = "PROCESSING"
+        session.add(job)
+        await session.commit()
+
+        try:
+            await storage_manager.delete_file(file_path)
+            await cleanup_repo.mark_success(session, job_id=job.id)
+        except Exception as e:
+            await cleanup_repo.mark_failed(session, job_id=job.id, error_message=str(e))
+        
+        await session.commit()
+        return f"Executed job {job_id}."
+
+    if db is not None:
+        return await run_with_db(db)
+    else:
+        from app.db.session import async_session_maker
+        async with async_session_maker() as session:
+            return await run_with_db(session)
+
+
+@celery.task(name="tasks.process_cleanup_jobs")
+def process_cleanup_jobs_task():
+    """Background task to fetch and execute pending file cleanup jobs from Supabase storage."""
+    return run_async_task(process_cleanup_jobs_async())
+
+
+@celery.task(name="tasks.delete_storage_file")
+def delete_storage_file_task(job_id: int):
+    """Background task to delete a specific storage file by job ID."""
+    return run_async_task(delete_storage_file_async(job_id))
+

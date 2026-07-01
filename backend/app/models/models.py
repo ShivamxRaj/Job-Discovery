@@ -377,3 +377,17 @@ class ScoringConfig(Base):
     remote_weight: Mapped[float] = mapped_column(Float, default=0.10)
     salary_weight: Mapped[float] = mapped_column(Float, default=0.10)
     freshness_weight: Mapped[float] = mapped_column(Float, default=0.10)
+
+
+# 23. Cleanup Jobs Model
+class CleanupJob(Base):
+    __tablename__ = "cleanup_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), default="PENDING")  # 'PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'PERMANENT_FAILURE'
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, default=5)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

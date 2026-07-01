@@ -92,9 +92,10 @@ async def test_upload_resume_failure_rollback(
 
     # Run upload and expect error
     with pytest.raises(Exception, match="OpenAI Parse Failed"):
-        await resume_service.upload_and_parse_resume(
-            db_session, user_id=user_id, file=fake_file, title="Test Resume"
-        )
+        with patch("app.services.celery_app.delete_storage_file_task.delay") as mock_delay:
+            await resume_service.upload_and_parse_resume(
+                db_session, user_id=user_id, file=fake_file, title="Test Resume"
+            )
 
-    # Verify storage manager delete_file was called to clean up orphaned storage file
-    mock_storage.delete_file.assert_called_once_with("resumes/1_1_v1_resume_fail.pdf")
+    # Verify that the Celery deletion task was scheduled asynchronously
+    mock_delay.assert_called_once()

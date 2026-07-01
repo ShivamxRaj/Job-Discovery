@@ -189,10 +189,24 @@ class ResumeService:
             await db.rollback()
             if uploaded_filename:
                 try:
-                    await storage_manager.delete_file(uploaded_filename)
-                except Exception as cleanup_err:
+                    from app.repositories.cleanup import cleanup_repo
+                    # Create and persist a new cleanup job to the database
+                    job = await cleanup_repo.create_job(db, file_path=uploaded_filename)
+                    await db.commit()
+                    
+                    # Trigger the async deletion task immediately in the background
+                    try:
+                        from app.services.celery_app import delete_storage_file_task
+                        delete_storage_file_task.delay(job.id)
+                    except Exception as celery_err:
+                        logger.warning(
+                            "Failed to enqueue celery task for cleanup job %d: %s. Will fall back to scheduled cron.",
+                            job.id, celery_err
+                        )
+                except Exception as cleanup_db_err:
                     logger.error(
-                        "Failed to delete '%s' during rollback: %s", uploaded_filename, cleanup_err
+                        "Failed to register CleanupJob for file '%s': %s",
+                        uploaded_filename, cleanup_db_err
                     )
             raise exc
 
