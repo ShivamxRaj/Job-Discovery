@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.repositories.base import BaseRepository
 from app.models.models import Application, JobRecommendation, Job
+from app.core.config import settings
 
 class ApplicationRepository(BaseRepository[Application]):
     def __init__(self):
@@ -22,15 +23,24 @@ class ApplicationRepository(BaseRepository[Application]):
         return list(result.scalars().all())
 
     async def get_recommendations_by_user(
-        self, db: AsyncSession, user_id: int, limit: int = 10
+        self, db: AsyncSession, user_id: int, resume_version_id: Optional[int] = None, limit: int = 10
     ) -> List[JobRecommendation]:
         query = (
             select(JobRecommendation)
+            .join(Job, JobRecommendation.job_id == Job.id)
             .where(
                 JobRecommendation.user_id == user_id,
                 JobRecommendation.is_dismissed == False
             )
-            .order_by(JobRecommendation.score.desc())
+        )
+        if resume_version_id is not None:
+            query = query.where(JobRecommendation.resume_version_id == resume_version_id)
+            
+        from app.repositories.job import job_repo
+        query = job_repo.apply_production_filter(query, include_seed=True)
+            
+        query = (
+            query.order_by(JobRecommendation.score.desc())
             .limit(limit)
             .options(
                 selectinload(JobRecommendation.job).selectinload(Job.company),
@@ -61,7 +71,7 @@ class ApplicationRepository(BaseRepository[Application]):
         return list(result.scalars().all())
 
     async def get_recommendation(
-        self, db: AsyncSession, user_id: int, job_id: int
+        self, db: AsyncSession, user_id: int, job_id: int, resume_version_id: Optional[int] = None
     ) -> Optional[JobRecommendation]:
         query = (
             select(JobRecommendation)
@@ -69,12 +79,18 @@ class ApplicationRepository(BaseRepository[Application]):
                 JobRecommendation.user_id == user_id,
                 JobRecommendation.job_id == job_id
             )
+        )
+        if resume_version_id is not None:
+            query = query.where(JobRecommendation.resume_version_id == resume_version_id)
+            
+        query = (
+            query.order_by(JobRecommendation.created_at.desc())
             .options(
                 selectinload(JobRecommendation.job).selectinload(Job.company),
                 selectinload(JobRecommendation.job).selectinload(Job.skills)
             )
         )
         result = await db.execute(query)
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
 application_repo = ApplicationRepository()

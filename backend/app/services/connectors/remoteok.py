@@ -38,12 +38,19 @@ class RemoteOKConnector(BaseConnector):
             jobs = []
             
             for item in raw_items[:limit]:
-                # Extract official job ID, fallback to deterministic fingerprint if unavailable
-                source_job_id = str(item.get("id")) if item.get("id") else None
-                if not source_job_id:
-                    # Generate deterministic fingerprint based on URL, company, and title
-                    hash_input = f"{item.get('url', '')}-{item.get('company', '')}-{item.get('position', '')}".encode("utf-8")
-                    source_job_id = "ro-" + hashlib.sha256(hash_input).hexdigest()[:12]
+                # Extract official job ID — MUST NEVER be NULL
+                raw_id = item.get("id")
+                if raw_id and str(raw_id).strip():
+                    source_job_id = f"ro-{str(raw_id).strip()}"
+                else:
+                    # Generate deterministic fingerprint from normalized company + title + url
+                    norm_company = (item.get("company") or "").strip().lower()
+                    norm_title = (item.get("position") or "").strip().lower()
+                    apply_url = (item.get("url") or "").strip()
+                    hash_input = f"{norm_company}|{norm_title}|{apply_url}".encode("utf-8")
+                    source_job_id = "ro-fp-" + hashlib.sha256(hash_input).hexdigest()[:16]
+
+                assert source_job_id, "source_job_id must NEVER be NULL"
 
                 # Extract date
                 created_at = None

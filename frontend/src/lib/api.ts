@@ -32,6 +32,9 @@ class ApiClient {
       const err = await res.json().catch(() => ({ detail: "An error occurred" }));
       throw new Error(err.detail || "Request failed");
     }
+    if (res.status === 204) {
+      return null as any;
+    }
     return res.json();
   }
 
@@ -47,6 +50,9 @@ class ApiClient {
       const err = await res.json().catch(() => ({ detail: "An error occurred" }));
       throw new Error(err.detail || "Request failed");
     }
+    if (res.status === 204) {
+      return null as any;
+    }
     return res.json();
   }
 
@@ -61,6 +67,9 @@ class ApiClient {
       const err = await res.json().catch(() => ({ detail: "An error occurred" }));
       throw new Error(err.detail || "Request failed");
     }
+    if (res.status === 204) {
+      return null as any;
+    }
     return res.json();
   }
 
@@ -73,6 +82,9 @@ class ApiClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "An error occurred" }));
       throw new Error(err.detail || "Request failed");
+    }
+    if (res.status === 204) {
+      return null as any;
     }
     return res.json();
   }

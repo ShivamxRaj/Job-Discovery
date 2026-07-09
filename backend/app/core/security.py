@@ -13,7 +13,7 @@ from app.models.models import User
 from app.repositories.user import user_repo
 from app.core.redis import redis_service
 
-pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"/api/v1/auth/login")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:

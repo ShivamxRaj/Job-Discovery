@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     
     # Configurable company job boards list for Greenhouse and Lever V1
     GREENHOUSE_COMPANIES: List[str] = ["figma", "stripe", "openai", "cloudflare", "lever"]
-    LEVER_COMPANIES: List[str] = ["vercel", "figma", "stripe", "openai"]
+    LEVER_COMPANIES: List[str] = ["spotify", "outreach"]
 
     # n8n Webhook Settings
     N8N_WEBHOOK_SECRET: Optional[str] = None
@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     WEEKLY_DIGEST_HOUR: int = 8
     WEEKLY_DIGEST_MINUTE: int = 0
     WEEKLY_DIGEST_DAY_OF_WEEK: str = "1" # 1 = Monday
+
+    # Deduplication thresholds
+    DEDUP_FUZZY_THRESHOLD_MIN: float = 0.78
+    DEDUP_FUZZY_THRESHOLD_HIGH: float = 0.95
+    DEDUP_SEMANTIC_THRESHOLD: float = 0.88
 
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")

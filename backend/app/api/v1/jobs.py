@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.db.session import get_db
 from app.core.security import get_current_user
 from app.models.models import User, JobRecommendation, Job
@@ -40,7 +41,7 @@ async def get_job_recommendations(
         version_id = latest_ver.id
 
     # Check database cache first
-    recs = await application_repo.get_recommendations_by_user(db, current_user.id)
+    recs = await application_repo.get_recommendations_by_user(db, current_user.id, resume_version_id=version_id)
     if not recs:
         # Run matching pipeline
         recs = await matching_service.match_resume_to_jobs(db, current_user.id, version_id)
@@ -54,12 +55,21 @@ async def save_recommendation(
     current_user: User = Depends(get_current_user)
 ):
     """Save/bookmark a recommended job"""
-    rec = await application_repo.get_recommendation(db, current_user.id, job_id)
-    if not rec:
+    query = select(JobRecommendation).where(
+        JobRecommendation.user_id == current_user.id,
+        JobRecommendation.job_id == job_id
+    )
+    result = await db.execute(query)
+    recs = list(result.scalars().all())
+    if not recs:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
     
-    rec.is_saved = True
+    for r in recs:
+        r.is_saved = True
     await db.commit()
+    
+    # Re-fetch with eager loaded relationships to avoid lazy loading errors
+    rec = await application_repo.get_recommendation(db, current_user.id, job_id)
     return rec
 
 @router.post("/recommendations/{job_id}/dismiss", status_code=status.HTTP_204_NO_CONTENT)
@@ -69,11 +79,17 @@ async def dismiss_recommendation(
     current_user: User = Depends(get_current_user)
 ):
     """Dismiss/hide a recommended job"""
-    rec = await application_repo.get_recommendation(db, current_user.id, job_id)
-    if not rec:
+    query = select(JobRecommendation).where(
+        JobRecommendation.user_id == current_user.id,
+        JobRecommendation.job_id == job_id
+    )
+    result = await db.execute(query)
+    recs = list(result.scalars().all())
+    if not recs:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recommendation not found")
     
-    rec.is_dismissed = True
+    for r in recs:
+        r.is_dismissed = True
     await db.commit()
     return
 
@@ -84,6 +100,8 @@ async def search_all_jobs(
 ):
     """Fetch/Search general job listings"""
     query = select(Job).where(Job.is_active == True)
+    from app.repositories.job import job_repo
+    query = job_repo.apply_production_filter(query, include_seed=True)
     if search:
         query = query.where(Job.title.ilike(f"%{search}%") | Job.description.ilike(f"%{search}%"))
     

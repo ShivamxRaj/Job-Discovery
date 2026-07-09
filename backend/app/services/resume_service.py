@@ -115,8 +115,35 @@ class ResumeService:
 
             # ── 6. AI Parse ───────────────────────────────────────────────────
             parsed_json: Dict[str, Any] = {}
+            from app.services.openai_service import ParseFailedError, EmbeddingFailedError
+            
             if ocr_status == "READY" and raw_text:
-                parsed_json = await openai_service.parse_resume(raw_text)
+                try:
+                    parsed_json = await openai_service.parse_resume(raw_text)
+                except ParseFailedError as parse_err:
+                    version.ocr_status = "PARSE_FAILED"
+                    # Persist ParsedData with empty dict and error message suggestion
+                    await resume_repo.save_parsed_data(
+                        db,
+                        version_id=version.id,
+                        raw_text=raw_text,
+                        parsed_json={},
+                        quality_score=None,
+                        quality_score_reason="Parsing failed",
+                        ats_score=None,
+                        ats_score_reason="Parsing failed",
+                        suggestions=["Resume parsing failed. Retrying..."],
+                    )
+                    await db.commit()
+                    
+                    # Queue retry
+                    try:
+                        from app.services.celery_app import retry_failed_resume_task
+                        retry_failed_resume_task.delay(version.id)
+                    except Exception as celery_err:
+                        logger.warning("Failed to queue Celery retry for resume %d: %s", version.id, celery_err)
+                    
+                    raise parse_err
 
             # ── 7. Intelligence Engine (deterministic) ────────────────────────
             intel = run_intelligence(parsed_json, raw_text)
@@ -144,7 +171,21 @@ class ResumeService:
             embedding_verify: Optional[EmbeddingVerification] = None
 
             if ocr_status == "READY" and raw_text:
-                embedding_vector = await openai_service.get_embedding(raw_text)
+                try:
+                    embedding_vector = await openai_service.get_embedding(raw_text)
+                except EmbeddingFailedError as emb_err:
+                    version.ocr_status = "EMBEDDING_FAILED"
+                    await db.commit()
+                    
+                    # Queue retry
+                    try:
+                        from app.services.celery_app import retry_failed_resume_task
+                        retry_failed_resume_task.delay(version.id)
+                    except Exception as celery_err:
+                        logger.warning("Failed to queue Celery retry for resume %d: %s", version.id, celery_err)
+                        
+                    raise emb_err
+                    
                 embedding_verify = EmbeddingVerification(embedding_vector)
 
                 # Validation assertions before storing
@@ -185,6 +226,9 @@ class ResumeService:
 
             return await resume_repo.get_version(db, version.id)
 
+        except (ParseFailedError, EmbeddingFailedError) as ai_err:
+            # Let these flow up directly without invoking file cleanup since the version metadata is preserved
+            raise ai_err
         except Exception as exc:
             await db.rollback()
             if uploaded_filename:
@@ -209,6 +253,80 @@ class ResumeService:
                         uploaded_filename, cleanup_db_err
                     )
             raise exc
+
+    async def retry_failed_stages(self, db: AsyncSession, version_id: int) -> Optional[ResumeVersion]:
+        """Retry parsing or embedding generation for a previously failed resume version."""
+        version = await resume_repo.get_version(db, version_id)
+        if not version:
+            return None
+            
+        from app.services.openai_service import ParseFailedError, EmbeddingFailedError
+        
+        # If parsing failed, retry parsing and embedding
+        if version.ocr_status == "PARSE_FAILED":
+            raw_text = version.parsed_data.raw_text if version.parsed_data else ""
+            if not raw_text:
+                return version
+            try:
+                parsed_json = await openai_service.parse_resume(raw_text)
+                intel = run_intelligence(parsed_json, raw_text)
+                
+                await resume_repo.save_parsed_data(
+                    db,
+                    version_id=version.id,
+                    raw_text=raw_text,
+                    parsed_json=parsed_json,
+                    quality_score=intel.quality_score,
+                    quality_score_reason=intel.quality_score_reason,
+                    ats_score=intel.ats_score,
+                    ats_score_reason=intel.ats_score_reason,
+                    suggestions=intel.suggestions,
+                )
+                
+                await resume_repo.save_skills(
+                    db, version_id=version.id, skills=intel.normalized_skills
+                )
+                
+                embedding_vector = await openai_service.get_embedding(raw_text)
+                await resume_repo.save_embedding(db, version_id=version.id, embedding=embedding_vector)
+                
+                await resume_repo.update_embedding_metadata(
+                    db,
+                    version_id=version.id,
+                    model=EMBEDDING_MODEL,
+                    dimensions=EMBEDDING_DIMENSIONS,
+                )
+                
+                version.ocr_status = "READY"
+                await db.commit()
+            except ParseFailedError:
+                pass
+            except EmbeddingFailedError:
+                version.ocr_status = "EMBEDDING_FAILED"
+                await db.commit()
+                
+        # If only embedding failed, retry embedding
+        elif version.ocr_status == "EMBEDDING_FAILED":
+            raw_text = version.parsed_data.raw_text if version.parsed_data else ""
+            if not raw_text:
+                return version
+            try:
+                embedding_vector = await openai_service.get_embedding(raw_text)
+                await resume_repo.save_embedding(db, version_id=version.id, embedding=embedding_vector)
+                
+                await resume_repo.update_embedding_metadata(
+                    db,
+                    version_id=version.id,
+                    model=EMBEDDING_MODEL,
+                    dimensions=EMBEDDING_DIMENSIONS,
+                )
+                
+                version.ocr_status = "READY"
+                await db.commit()
+            except EmbeddingFailedError:
+                pass
+                
+        return version
 
 
 resume_service = ResumeService()

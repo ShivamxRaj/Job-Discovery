@@ -133,9 +133,11 @@ class ResumeSkill(Base):
     resume_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("resume_versions.id", ondelete="CASCADE"), nullable=False)
     skill_name: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
     years_experience: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    skill_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("skills.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
     resume_version: Mapped["ResumeVersion"] = relationship("ResumeVersion", back_populates="skills")
+    skill: Mapped[Optional["Skill"]] = relationship("Skill")
 
 
 # 8. Resume Projects Model
@@ -193,6 +195,29 @@ class Company(Base):
     jobs: Mapped[List["Job"]] = relationship("Job", back_populates="company")
 
 
+class CanonicalCompany(Base):
+    __tablename__ = "canonical_companies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    normalized_name: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    aliases: Mapped[List["CompanyAlias"]] = relationship("CompanyAlias", back_populates="company", cascade="all, delete-orphan")
+
+
+class CompanyAlias(Base):
+    __tablename__ = "company_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    alias: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    company_id: Mapped[int] = mapped_column(Integer, ForeignKey("canonical_companies.id", ondelete="CASCADE"), nullable=False)
+
+    company: Mapped["CanonicalCompany"] = relationship("CanonicalCompany", back_populates="aliases")
+
+
 # 12. Jobs Model
 class Job(Base):
     __tablename__ = "jobs"
@@ -212,6 +237,27 @@ class Job(Base):
     url: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_seed_data: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    data_origin: Mapped[str] = mapped_column(String(50), default="MANUAL", server_default="'MANUAL'", nullable=False)
+    embedding_status: Mapped[str] = mapped_column(String(50), default="PENDING", server_default="'PENDING'", nullable=False, index=True)
+    embedding_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    original_company_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    normalized_company_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    employment_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    remote_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    salary_period: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    duplicate_group_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    duplicate_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duplicate_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    normalization_version: Mapped[str] = mapped_column(String(50), default="v1", server_default="'v1'", nullable=False)
+    title_confidence: Mapped[float] = mapped_column(Float, default=1.0, server_default="'1.0'", nullable=False)
+    salary_confidence: Mapped[float] = mapped_column(Float, default=1.0, server_default="'1.0'", nullable=False)
+    location_confidence: Mapped[float] = mapped_column(Float, default=1.0, server_default="'1.0'", nullable=False)
+    job_category: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    category_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     # Relationships
     company: Mapped["Company"] = relationship("Company", back_populates="jobs")
@@ -243,9 +289,34 @@ class JobSkill(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     job_id: Mapped[int] = mapped_column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False)
     skill_name: Mapped[str] = mapped_column(String(100), index=True, nullable=False)
+    skill_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("skills.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
     job: Mapped["Job"] = relationship("Job", back_populates="skills")
+    skill: Mapped[Optional["Skill"]] = relationship("Skill")
+
+
+# 14b. Skills Master Model
+class Skill(Base):
+    __tablename__ = "skills"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    parent_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("skills.id", ondelete="SET NULL"), nullable=True)
+
+    parent: Mapped[Optional["Skill"]] = relationship("Skill", remote_side=[id], backref="children")
+
+
+# 14c. Skill Aliases Model
+class SkillAlias(Base):
+    __tablename__ = "skill_aliases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    alias: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    skill_id: Mapped[int] = mapped_column(Integer, ForeignKey("skills.id", ondelete="CASCADE"), nullable=False)
+
+    # Relationships
+    skill: Mapped["Skill"] = relationship("Skill")
 
 
 # 15. Job Embeddings Model (pgvector)
@@ -287,6 +358,10 @@ class JobRecommendation(Base):
     is_saved: Mapped[bool] = mapped_column(Boolean, default=False)
     is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "job_id", "resume_version_id", name="uq_user_job_resume_version"),
+    )
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="recommendations")

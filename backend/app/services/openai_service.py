@@ -1,8 +1,21 @@
 import os
 import json
 from typing import List, Dict, Any, Tuple
+import logging
 import openai
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class EmbeddingFailedError(Exception):
+    """Raised when embedding generation fails. Caller should flag as EMBEDDING_FAILED."""
+    pass
+
+
+class ParseFailedError(Exception):
+    """Raised when AI resume parsing fails. Caller should flag as PARSE_FAILED."""
+    pass
 
 class OpenAIService:
     def __init__(self):
@@ -24,12 +37,13 @@ class OpenAIService:
             self.client = None
 
     async def get_embedding(self, text: str) -> List[float]:
-        """Generate text embedding (1536 dimensions) using text-embedding-3-small"""
+        """Generate text embedding (1536 dimensions) using text-embedding-3-small.
+        NEVER returns random/fake vectors. Raises EmbeddingFailedError on failure."""
         if not self.client:
-            # Return dummy 1536-dimensional vector for local testing
-            import random
-            random.seed(hash(text))
-            return [random.uniform(-1.0, 1.0) for _ in range(1536)]
+            raise EmbeddingFailedError(
+                "OpenAI client not configured. Cannot generate embedding. "
+                "Set OPENAI_API_KEY in environment."
+            )
             
         try:
             # Truncate text if it's too long
@@ -40,23 +54,20 @@ class OpenAIService:
             )
             return response.data[0].embedding
         except Exception as e:
-            print(f"OpenAI embedding generation failed: {e}")
-            # Fallback
-            import random
-            return [random.uniform(-0.1, 0.1) for _ in range(1536)]
+            logger.error(f"OpenAI embedding generation failed: {e}")
+            raise EmbeddingFailedError(
+                f"Embedding generation failed: {str(e)}. "
+                f"Version should be flagged as EMBEDDING_FAILED for retry."
+            )
 
     async def parse_resume(self, text: str) -> Dict[str, Any]:
-        """Extract structured JSON profile from raw resume text"""
+        """Extract structured JSON profile from raw resume text.
+        NEVER returns mock/fake data. Raises ParseFailedError on failure."""
         if not self.client:
-            # Return Mock Parsed JSON
-            return {
-                "skills": [{"name": "Python", "years": 3.0}, {"name": "React", "years": 2.0}, {"name": "SQL", "years": 4.0}],
-                "education": [{"degree": "B.S. Computer Science", "school": "State University", "year": 2024}],
-                "experience": [{"title": "Software Engineer Intern", "company": "Tech Corp", "years": 1.0}],
-                "quality_score": 85.0,
-                "ats_score": 80.0,
-                "suggestions": ["Add more numerical achievements to your experience bullets.", "List your certification details explicitly."]
-            }
+            raise ParseFailedError(
+                "OpenAI client not configured. Cannot parse resume. "
+                "Set OPENAI_API_KEY in environment."
+            )
 
         prompt = f"""
         You are an expert resume parser and ATS system.
@@ -102,16 +113,11 @@ class OpenAIService:
             
             return parsed
         except Exception as e:
-            print(f"OpenAI resume parsing failed: {e}")
-            # Fallback
-            return {
-                "skills": [],
-                "education": [],
-                "experience": [],
-                "quality_score": 60.0,
-                "ats_score": 55.0,
-                "suggestions": ["Failed to connect to AI parsing engine. Review manually."]
-            }
+            logger.error(f"OpenAI resume parsing failed: {e}")
+            raise ParseFailedError(
+                f"Resume parsing failed: {str(e)}. "
+                f"Version should be flagged as PARSE_FAILED for retry."
+            )
 
     async def explain_match(self, resume_summary: str, job_description: str) -> str:
         """Generate a natural language explanation of how a resume matches a job"""

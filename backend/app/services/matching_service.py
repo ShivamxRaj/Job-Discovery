@@ -8,6 +8,12 @@ from app.repositories.application import application_repo
 from app.repositories.user import user_repo
 from app.services.openai_service import openai_service
 from app.models.models import JobRecommendation, UserPreferences, ScoringConfig
+from app.services.normalization_service import NormalizationService
+
+# Configurable diversity thresholds
+TOP_K = 10
+MAX_COMPANY_RESULTS_PER_TOP_K = 2
+MAX_CATEGORY_RESULTS_PER_TOP_K = 3
 
 class MatchingService:
     async def match_resume_to_jobs(
@@ -31,14 +37,40 @@ class MatchingService:
         pref_remote = prefs.is_remote if prefs else False
         company_exclusions = set(prefs.company_exclusions) if prefs and prefs.company_exclusions else set()
 
+        # Determine candidate category using multi-signal classifier
+        cand_text = " ".join(user_skills).lower()
+        if prefs and prefs.preferred_roles:
+            cand_text += " " + " ".join(prefs.preferred_roles).lower()
+        try:
+            for exp in version.parsed_data.parsed_json.get("experience", []):
+                if exp.get("title"):
+                    cand_text += " " + exp.get("title").lower()
+        except Exception:
+            pass
+            
+        cand_title = ""
+        if prefs and prefs.preferred_roles:
+            cand_title = prefs.preferred_roles[0]
+        elif version.parsed_data.parsed_json.get("experience"):
+            cand_title = version.parsed_data.parsed_json.get("experience")[0].get("title", "")
+        else:
+            cand_title = "Software Engineer"
+            
+        candidate_category, candidate_conf = NormalizationService.classify_category(
+            title=cand_title,
+            skills=list(user_skills),
+            description=cand_text
+        )
+
         # 3. Retrieve retrieval scoring configs (Default weights)
         weights = {
-            "skill": 0.35,
+            "role": 0.25,
+            "skill": 0.20,
             "experience": 0.15,
             "location": 0.15,
             "remote": 0.10,
             "salary": 0.10,
-            "freshness": 0.15
+            "freshness": 0.05
         }
 
         # 4. Phase 1: Vector similarity search (Retrieve Top 100 jobs)
@@ -54,6 +86,39 @@ class MatchingService:
             # Check company exclusions
             if job.company.name in company_exclusions:
                 continue
+
+            # Multi-signal job classification
+            job_skills_list = [s.skill_name for s in job.skills]
+            job_category, job_conf = NormalizationService.classify_category(
+                title=job.title,
+                skills=job_skills_list,
+                description=job.description,
+                company_name=job.company.name,
+                company_website=job.company.website,
+                job_type=job.job_type
+            )
+
+            # Category similarity matching matrix
+            category_score = 0.0
+            if candidate_category == job_category:
+                category_score = 1.0
+            else:
+                tech_categories = {"SOFTWARE_ENGINEERING", "AI_ML", "DATA_SCIENCE", "DEVOPS_CLOUD", "CYBERSECURITY", "BUSINESS_ANALYTICS"}
+                if candidate_category in tech_categories and job_category in tech_categories:
+                    if {candidate_category, job_category} <= {"SOFTWARE_ENGINEERING", "AI_ML"}:
+                        category_score = 0.9
+                    elif {candidate_category, job_category} <= {"SOFTWARE_ENGINEERING", "DEVOPS_CLOUD"}:
+                        category_score = 0.8
+                    elif {candidate_category, job_category} <= {"SOFTWARE_ENGINEERING", "CYBERSECURITY"}:
+                        category_score = 0.8
+                    elif {candidate_category, job_category} <= {"DATA_SCIENCE", "BUSINESS_ANALYTICS"}:
+                        category_score = 0.8
+                    elif {candidate_category, job_category} <= {"AI_ML", "DATA_SCIENCE"}:
+                        category_score = 0.8
+                    else:
+                        category_score = 0.6
+                else:
+                    category_score = 0.0
 
             # Skill overlap
             job_skills = {s.skill_name.lower() for s in job.skills}
@@ -77,14 +142,41 @@ class MatchingService:
             if min_salary and job.salary_min:
                 salary_score = 1.0 if job.salary_min >= min_salary else 0.5
 
-            # Freshness score (exponential decay based on days old)
+            # Experience match
+            experience_score = 1.0
+            candidate_years = 0.0
+            try:
+                experience_list = version.parsed_data.parsed_json.get("experience", [])
+                for exp in experience_list:
+                    years = exp.get("years")
+                    if years:
+                        candidate_years += float(years)
+            except Exception:
+                candidate_years = 0.0
+
+            # Determine required experience based on job title keywords
+            job_title_lower = job.title.lower()
+            if any(w in job_title_lower for w in ["senior", "sr.", "sr ", "lead", "principal", "architect"]):
+                required_years = 5.0
+            elif any(w in job_title_lower for w in ["junior", "jr.", "jr ", "associate", "intern", "entry"]):
+                required_years = 1.0
+            else:
+                required_years = 3.0
+
+            if candidate_years >= required_years:
+                experience_score = 1.0
+            else:
+                experience_score = max(0.2, candidate_years / required_years)
+
+            # Freshness score (linear decay based on days old)
             days_old = (now - job.created_at).days
-            freshness_score = max(0.1, 1.0 - (days_old / 30.0)) # linearly decays to 0.1 after 30 days
+            freshness_score = max(0.1, 1.0 - (days_old / 30.0))
 
             # Rule engine final score (Vector score + Rule scores weighted)
-            # Vector score forms 40% of basic score, rules make up 60%
             weighted_rules = (
+                (category_score * weights["role"]) +
                 (skill_score * weights["skill"]) +
+                (experience_score * weights["experience"]) +
                 (location_score * weights["location"]) +
                 (remote_score * weights["remote"]) +
                 (salary_score * weights["salary"]) +
@@ -92,23 +184,54 @@ class MatchingService:
             )
             final_score = (vector_score * 0.4) + (weighted_rules * 0.6)
 
+            # Apply category compatibility penalty (gate)
+            if category_score == 0.0:
+                final_score *= 0.1
+
             scored_jobs.append({
                 "job": job,
-                "score": round(final_score * 100, 2) # convert to percentage
+                "score": round(final_score * 100, 2),
+                "category": job_category
             })
 
-        # Sort jobs by final score descending and select top 20
+        # Sort jobs by final score descending
         scored_jobs.sort(key=lambda x: x["score"], reverse=True)
-        top_20 = scored_jobs[:20]
 
-        # 6. Phase 3: AI Match Explanation (Retrieve Top 10 recommendations)
+        # Apply greedy diversity re-ranking (company and category limits)
+        diverse_scored_jobs = []
+        company_counts = {}
+        category_counts = {}
+        deferred_jobs = []
+
+        for item in scored_jobs:
+            job_obj = item["job"]
+            company_name = job_obj.company.name if job_obj.company else "Unknown"
+            cat = item["category"]
+
+            comp_count = company_counts.get(company_name, 0)
+            cat_count = category_counts.get(cat, 0)
+
+            # Check dynamic diversity thresholds
+            if comp_count < MAX_COMPANY_RESULTS_PER_TOP_K and cat_count < MAX_CATEGORY_RESULTS_PER_TOP_K:
+                diverse_scored_jobs.append(item)
+                company_counts[company_name] = comp_count + 1
+                category_counts[cat] = cat_count + 1
+            else:
+                deferred_jobs.append(item)
+
+        # Fill up to 20 if needed
+        if len(diverse_scored_jobs) < 20:
+            diverse_scored_jobs.extend(deferred_jobs[:20 - len(diverse_scored_jobs)])
+
+        top_20 = diverse_scored_jobs[:20]
+
+        # 6. Phase 3: Match Explanation (Retrieve Top TOP_K recommendations)
         final_recommendations = []
         resume_summary = f"Skills: {', '.join(user_skills)}. Experience: {[e.get('title') for e in version.parsed_data.parsed_json.get('experience', [])]}"
         
-        # We limit the AI calls to the top 10 recommended jobs to save tokens/speed up
-        top_10 = top_20[:10]
+        top_k_jobs = top_20[:TOP_K]
 
-        for item in top_10:
+        for item in top_k_jobs:
             job_obj = item["job"]
             score = item["score"]
 

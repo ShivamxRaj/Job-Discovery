@@ -1,49 +1,78 @@
-# Dependencies
-node_modules/
-.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+# ===========================
+# SECRETS — never commit
+# ===========================
+.env
+.env.local
+.env.*.local
+*.pem
 
-# Python envs and caches
+# ===========================
+# Python
+# ===========================
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyc
 .pytest_cache/
 .venv/
 venv/
 ENV/
 env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ===========================
+# Databases & local storage
+# ===========================
 *.db
 *.sqlite
+*.sqlite3
+backend/storage/
 
-# Next.js
+# ===========================
+# Scratch / debug scripts
+# Investigative one-off scripts — not production code
+# ===========================
+backend/scratch/
+backend/scratch_*.py
+backend/seed_real_jobs.py
+backend/test_github_models.py
+
+# ===========================
+# Next.js / Node.js
+# ===========================
+node_modules/
 .next/
 out/
-build/
 *.tsbuildinfo
 next-env.d.ts
+.pnp
+.pnp.*
 
-# User files and secrets
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env*.local
-
+# ===========================
 # OS files
+# ===========================
 .DS_Store
 Thumbs.db
-*.pem
+desktop.ini
 
+# ===========================
 # IDEs
+# ===========================
 .vscode/
 .idea/
 
-# Tool specific
+# ===========================
+# Tool-specific
+# ===========================
 .gemini/
 /artifacts/
+implementation_plan.md
+
+# ===========================
+# Logs
+# ===========================
+*.log
+logs/

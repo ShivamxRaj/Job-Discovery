@@ -16,33 +16,52 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      let resumes: any[] = [];
       try {
-        const resumes: any = await api.get("/resumes");
-        const recs: any = await api.get("/jobs/recommendations").catch(() => []);
-        const apps: any = await api.get("/applications").catch(() => []);
-        
-        let latest = null;
-        if (resumes.length > 0) {
-          const versions: any = await api.get(`/resumes/${resumes[0].id}/versions`);
+        resumes = await api.get("/resumes") || [];
+      } catch (err) {
+        console.error("Failed to load resumes", err);
+      }
+
+      let recs: any[] = [];
+      try {
+        recs = await api.get("/jobs/recommendations") || [];
+      } catch (err) {
+        console.error("Failed to load recommendations", err);
+      }
+
+      let apps: any[] = [];
+      try {
+        apps = await api.get("/applications") || [];
+      } catch (err) {
+        console.error("Failed to load applications", err);
+      }
+      
+      let latest = null;
+      let totalVersionsCount = 0;
+      if (resumes.length > 0) {
+        try {
+          const versions: any = await api.get(`/resumes/${resumes[0].id}/versions`) || [];
           if (versions.length > 0) {
+            totalVersionsCount = versions.length;
             // Sort by version number descending to get the latest version
             versions.sort((a: any, b: any) => b.version_number - a.version_number);
             latest = versions[0]; // latest version
           }
+        } catch (err) {
+          console.error("Failed to load resume versions", err);
         }
-
-        const interviewsCount = apps.filter((a: any) => a.status === "Interview").length;
-
-        setStats({
-          resumes: resumes.length,
-          recommendations: recs.length,
-          applications: apps.length,
-          interviews: interviewsCount
-        });
-        setLatestVersion(latest);
-      } catch (err) {
-        console.error("Failed to load dashboard data", err);
       }
+
+      const interviewsCount = apps.filter((a: any) => a.status === "Interview").length;
+
+      setStats({
+        resumes: totalVersionsCount > 0 ? totalVersionsCount : resumes.length,
+        recommendations: recs.length,
+        applications: apps.length,
+        interviews: interviewsCount
+      });
+      setLatestVersion(latest);
     };
 
     fetchDashboardData();

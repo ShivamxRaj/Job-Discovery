@@ -49,6 +49,20 @@ celery.conf.beat_schedule = {
         "task": "tasks.ingest_raw_jobs",
         "schedule": crontab(hour="2", minute="0"), # Daily at 2 AM
     },
+    "process-raw-jobs-hourly": {
+        "task": "tasks.process_raw_jobs_queue",
+        "schedule": crontab(minute="*/30"), # Run every 30 minutes
+    },
+    # --- KNOWN OPERATIONAL LIMITATION (TD-006) ---
+    # Provider: GitHub Models (text-embedding-3-small)
+    # Hard limit: 150 requests/day/model (free tier)
+    # Strategy: Run once daily at 00:05 UTC (5 min after quota reset)
+    # with full batch of 150. Clears ~150 PENDING jobs per day.
+    # This constraint is ACCEPTED until user growth justifies paid tier.
+    "process-job-embeddings-daily-at-midnight": {
+        "task": "tasks.process_job_embeddings_daily",
+        "schedule": crontab(hour="0", minute="5"),  # 00:05 UTC daily
+    },
 }
 
 # Helper to run async db queries within Celery sync threads
@@ -251,5 +265,93 @@ def ingest_raw_jobs_task(self):
     except Exception as exc:
         # Retry on transient errors
         raise self.retry(exc=exc)
+
+
+@celery.task(name="tasks.process_raw_jobs_queue")
+def process_raw_jobs_queue_task():
+    """Celery task to read pending raw jobs and ingest them into production jobs table."""
+    from app.db.session import async_session_maker
+    from app.services.ingestion_service import ingestion_service
+    
+    async def run():
+        async with async_session_maker() as db:
+            return await ingestion_service.process_pending_raw_jobs(db, batch_size=20)
+    return run_async_task(run())
+
+
+@celery.task(name="tasks.process_job_embeddings")
+def process_job_embeddings_task():
+    """Legacy embedding task (kept for backward compatibility). Not scheduled."""
+    from app.db.session import async_session_maker
+    from app.services.embedding_service import embedding_service
+    async def run():
+        async with async_session_maker() as db:
+            return await embedding_service.process_pending_embeddings(db, batch_size=20)
+    return run_async_task(run())
+
+
+@celery.task(name="tasks.process_job_embeddings_daily")
+def process_job_embeddings_daily_task():
+    """Daily embedding scheduler — runs at 00:05 UTC to consume the full 150/day quota.
+    
+    This is the ONLY scheduled embedding task. Replaces the old every-5-min run.
+    
+    TD-006 Status: Known Operational Limitation.
+    Provider: GitHub Models (text-embedding-3-small).
+    Limit: 150 requests/day/model (free tier).
+    Resolution: Migrate to paid tier when active users justify the cost.
+    """
+    import datetime
+    from app.db.session import async_session_maker
+    from app.services.embedding_service import embedding_service
+
+    run_time = datetime.datetime.utcnow().isoformat()
+    print(f"[EmbeddingScheduler] {run_time} UTC — Daily batch started.")
+
+    async def run():
+        async with async_session_maker() as db:
+            # Count pending before run
+            from sqlalchemy import text
+            before = await db.execute(text(
+                "SELECT COUNT(*) FROM jobs WHERE embedding_status = 'PENDING';"
+            ))
+            pending_before = before.scalar()
+
+            # Process up to 150 (full daily quota)
+            result = await embedding_service.process_pending_embeddings(db, batch_size=150)
+
+            # Count remaining after run
+            after = await db.execute(text(
+                "SELECT COUNT(*) FROM jobs WHERE embedding_status = 'PENDING';"
+            ))
+            pending_after = after.scalar()
+
+            print(
+                f"[EmbeddingScheduler] Run complete. "
+                f"Attempted={result['attempted']}, "
+                f"Completed={result['completed']}, "
+                f"Failed={result['failed']}, "
+                f"RateLimited={result['rate_limited']}, "
+                f"PendingBefore={pending_before}, "
+                f"PendingAfter={pending_after}"
+            )
+            return result
+
+    result = run_async_task(run())
+    end_time = datetime.datetime.utcnow().isoformat()
+    print(f"[EmbeddingScheduler] {end_time} UTC — Daily batch finished. Next run: tomorrow 00:05 UTC.")
+    return result
+
+
+@celery.task(name="tasks.retry_failed_resume")
+def retry_failed_resume_task(version_id: int):
+    """Celery task to retry parsing/embedding for a failed resume version."""
+    from app.db.session import async_session_maker
+    from app.services.resume_service import resume_service
+    
+    async def run():
+        async with async_session_maker() as db:
+            return await resume_service.retry_failed_stages(db, version_id)
+    return run_async_task(run())
 
 

@@ -4,13 +4,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.repositories.base import BaseRepository
 from app.models.models import Job, JobEmbedding, JobSkill, Company, JobSource, DuplicateGroup
+from app.core.config import settings
 
 class JobRepository(BaseRepository[Job]):
     def __init__(self):
         super().__init__(Job)
 
+    @staticmethod
+    def apply_production_filter(query, include_seed: bool = False):
+        """
+        Applies is_seed_data filtering to an existing SQLAlchemy query.
+        Production is the default path (excludes seed jobs).
+        Development/debug must explicitly opt-in by setting include_seed=True.
+        """
+        if include_seed and (settings.ENVIRONMENT == "development" or settings.DEBUG):
+            return query
+        return query.where(Job.is_seed_data == False)
+
     async def get_by_url(self, db: AsyncSession, url: str) -> Optional[Job]:
         query = select(Job).where(Job.url == url)
+        query = self.apply_production_filter(query, include_seed=True)
         result = await db.execute(query)
         return result.scalar_one_or_none()
 
@@ -49,14 +62,16 @@ class JobRepository(BaseRepository[Job]):
             query = (
                 select(Job, JobEmbedding)
                 .join(JobEmbedding, Job.id == JobEmbedding.job_id)
-                .where(Job.is_active == True)
-                .options(selectinload(Job.company), selectinload(Job.skills))
+                .where(and_(Job.is_active == True, Job.embedding_status == 'COMPLETED'))
             )
+            query = self.apply_production_filter(query, include_seed=True)
+            
+            query = query.options(selectinload(Job.company), selectinload(Job.skills))
             result = await db.execute(query)
             rows = result.all()
             
             def cosine_similarity(v1, v2):
-                if not v1 or not v2:
+                if v1 is None or v2 is None or len(v1) == 0 or len(v2) == 0:
                     return 0.0
                 dot_prod = sum(x * y for x, y in zip(v1, v2))
                 mag1 = math.sqrt(sum(x * x for x in v1))
@@ -87,8 +102,12 @@ class JobRepository(BaseRepository[Job]):
         query = (
             select(Job, (1.0 - distance_expr).label("similarity"))
             .join(JobEmbedding, Job.id == JobEmbedding.job_id)
-            .where(Job.is_active == True)
-            .order_by(distance_expr)
+            .where(and_(Job.is_active == True, Job.embedding_status == 'COMPLETED'))
+        )
+        query = self.apply_production_filter(query, include_seed=True)
+            
+        query = (
+            query.order_by(distance_expr)
             .limit(limit)
             .options(selectinload(Job.company), selectinload(Job.skills))
         )

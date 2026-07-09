@@ -16,7 +16,7 @@ from app.db.base_class import Base
 from app.models.models import (
     User, Auth, UserPreferences, Resume, ResumeVersion, ResumeParsedData,
     ResumeSkill, ResumeProject, ResumeCertification, ResumeEmbedding,
-    Company, Job, JobSource, JobSkill, JobEmbedding, DuplicateGroup,
+    Company, Job, JobSource, JobSkill, Skill, SkillAlias, JobEmbedding, DuplicateGroup,
     JobRecommendation, Application, Notification, AuditLog, MatchRun,
     ScoringConfig
 )

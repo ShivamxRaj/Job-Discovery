@@ -102,7 +102,7 @@ async def test_remoteok_connector_success(mock_get):
     
     assert len(jobs) == 1
     assert isinstance(jobs[0], RawJobData)
-    assert jobs[0].source_job_id == "12345"
+    assert jobs[0].source_job_id == "ro-12345"
     assert jobs[0].title == "Staff Engineer"
     assert jobs[0].company_name == "RemoteCorp"
     assert jobs[0].url == "https://remoteok.com/jobs/123"
