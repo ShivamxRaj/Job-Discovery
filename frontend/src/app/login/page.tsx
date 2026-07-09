@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Briefcase, ArrowRight } from "lucide-react";
@@ -14,6 +14,69 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Handle callback response from Google Identity Services
+  const handleGoogleResponse = async (response: any) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const data: any = await api.post("/auth/google", {
+        credential: response.credential,
+      });
+      localStorage.setItem("token", data.access_token);
+      router.push("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Failed to authenticate with Google.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Quick dev-only trigger for testing without needing setup
+  const triggerMockGoogleLogin = async () => {
+    await handleGoogleResponse({
+      credential: "mock_email:google.tester@gmail.com",
+    });
+  };
+
+  useEffect(() => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      console.warn("NEXT_PUBLIC_GOOGLE_CLIENT_ID is not configured.");
+      return;
+    }
+
+    // Load Google script dynamically
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => {
+      if ((window as any).google) {
+        (window as any).google.accounts.id.initialize({
+          client_id: clientId,
+          callback: handleGoogleResponse,
+        });
+        (window as any).google.accounts.id.renderButton(
+          document.getElementById("google-signin-btn"),
+          {
+            theme: "filled_black",
+            size: "large",
+            width: 382,
+            text: "signin_with",
+            shape: "pill",
+          }
+        );
+      }
+    };
+    document.body.appendChild(script);
+
+    return () => {
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,6 +171,31 @@ export default function Login() {
               </button>
             </div>
           </form>
+
+          {/* Social Sign In Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center" aria-hidden="true">
+              <div className="w-full border-t border-zinc-800"></div>
+            </div>
+            <div className="relative flex justify-center text-xs text-zinc-400 uppercase">
+              <span className="bg-zinc-950 px-2">Or continue with</span>
+            </div>
+          </div>
+
+          {/* Google SSO Button Container */}
+          <div className="flex flex-col items-center justify-center space-y-3">
+            <div id="google-signin-btn" className="w-full min-h-[40px] flex justify-center"></div>
+            
+            {/* Local dev bypass fallback (visible when Client ID is missing) */}
+            {!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
+              <button
+                onClick={triggerMockGoogleLogin}
+                className="text-xs text-zinc-500 hover:text-indigo-400 hover:underline transition-colors mt-2"
+              >
+                ⚡ Dev Fallback: Quick Login with Mock Google Account
+              </button>
+            )}
+          </div>
         </div>
       </div>
       <Footer />

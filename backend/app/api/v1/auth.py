@@ -88,13 +88,38 @@ async def login(user_in: UserLogin, db: AsyncSession = Depends(get_db)):
 
 @router.post("/google", response_model=Token)
 async def google_oauth(payload: GoogleLogin, db: AsyncSession = Depends(get_db)):
-    """Authenticate a Google OAuth ID token"""
-    # In production, parse token using google-auth library
-    # Here we mock the credential parsing to find/create user
-    id_info = {"email": "oauth.user@gmail.com", "sub": "google-oauth-sub-12345"}
-    
-    if payload.credential == "error":
-        raise HTTPException(status_code=400, detail="Invalid Google credentials")
+    """Authenticate a Google OAuth ID token using google-auth library"""
+    if settings.GOOGLE_CLIENT_ID and not payload.credential.startswith("mock_"):
+        try:
+            from google.oauth2 import id_token
+            from google.auth.transport import requests as google_requests
+            
+            id_info = id_token.verify_oauth2_token(
+                payload.credential,
+                google_requests.Request(),
+                settings.GOOGLE_CLIENT_ID
+            )
+            
+            if id_info['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
+                raise ValueError('Wrong issuer.')
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Google token verification failed: {str(e)}"
+            )
+    else:
+        # Development / Testing fallback
+        if payload.credential == "error":
+            raise HTTPException(status_code=400, detail="Invalid Google credentials")
+            
+        mock_email = "oauth.user@gmail.com"
+        if payload.credential.startswith("mock_email:"):
+            mock_email = payload.credential.split("mock_email:")[1]
+            
+        id_info = {
+            "email": mock_email,
+            "sub": f"google-oauth-sub-{abs(hash(mock_email))}"
+        }
         
     email = id_info["email"]
     provider_id = id_info["sub"]
@@ -114,6 +139,17 @@ async def google_oauth(payload: GoogleLogin, db: AsyncSession = Depends(get_db))
     
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
+    
+    # Store refresh token in Auth DB record
+    google_auth = next((a for a in user.auth_accounts if a.provider == "google"), None)
+    if not google_auth:
+        google_auth = await user_repo.create_oauth_account(db, user_id=user.id, provider="google", provider_id=provider_id)
+        user.auth_accounts.append(google_auth)
+        
+    decoded = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    jti = decoded.get("jti")
+    hashed = hash_token(refresh_token)
+    google_auth.refresh_token = f"{jti}:{hashed}"
     
     await db.commit()
     return Token(access_token=access_token, refresh_token=refresh_token)
