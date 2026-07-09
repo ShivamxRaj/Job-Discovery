@@ -1,0 +1,62 @@
+services:
+  # 1. FastAPI Web Server
+  - type: web
+    name: job-discovery-api
+    env: python
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: job-discovery-redis
+          property: connectionString
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: NEXT_PUBLIC_API_URL
+        sync: false
+
+  # 2. Celery Worker (Background Jobs)
+  - type: worker
+    name: job-discovery-celery-worker
+    env: python
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A app.services.celery_app worker --loglevel=info"
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: job-discovery-redis
+          property: connectionString
+      - key: GITHUB_TOKEN
+        sync: false
+
+  # 3. Celery Beat (Scheduled Jobs)
+  - type: worker
+    name: job-discovery-celery-beat
+    env: python
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "celery -A app.services.celery_app beat --loglevel=info"
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: job-discovery-redis
+          property: connectionString
+
+  # 4. Redis (Message Broker for Celery)
+  - type: redis
+    name: job-discovery-redis
+    ipAllowList: [] # keeps it secure, only accessible by Render services
+    plan: free # Use free tier for Redis
