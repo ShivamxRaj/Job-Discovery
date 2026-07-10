@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Sparkles, FileText, Briefcase, HelpCircle, CheckCircle, Clock } from "lucide-react";
 import api from "@/lib/api";
+import { toast } from "sonner";
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
@@ -16,52 +17,57 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      let resumes: any[] = [];
-      try {
-        resumes = await api.get("/resumes") || [];
-      } catch (err) {
-        console.error("Failed to load resumes", err);
-      }
-
-      let recs: any[] = [];
-      try {
-        recs = await api.get("/jobs/recommendations") || [];
-      } catch (err) {
-        console.error("Failed to load recommendations", err);
-      }
-
-      let apps: any[] = [];
-      try {
-        apps = await api.get("/applications") || [];
-      } catch (err) {
-        console.error("Failed to load applications", err);
-      }
-      
-      let latest = null;
-      let totalVersionsCount = 0;
-      if (resumes.length > 0) {
-        try {
-          const versions: any = await api.get(`/resumes/${resumes[0].id}/versions`) || [];
-          if (versions.length > 0) {
-            totalVersionsCount = versions.length;
-            // Sort by version number descending to get the latest version
-            versions.sort((a: any, b: any) => b.version_number - a.version_number);
-            latest = versions[0]; // latest version
-          }
-        } catch (err) {
-          console.error("Failed to load resume versions", err);
+      // 1. Fetch user profile immediately for instant notification
+      api.get("/auth/me").then((currentUser: any) => {
+        if (!sessionStorage.getItem("welcomed") && currentUser) {
+          toast.success(`Welcome to JobDiscovery, ${currentUser.full_name || "User"}!`, {
+            description: "Your personalized job search command center.",
+            duration: 5000,
+          });
+          sessionStorage.setItem("welcomed", "true");
         }
+      }).catch(err => console.error("Failed to load user profile", err));
+
+      // 2. Fetch all dashboard stats in parallel to drastically reduce load time
+      try {
+        const [resumesData, recsData, appsData] = await Promise.all([
+          api.get("/resumes").catch(() => []),
+          api.get("/jobs/recommendations").catch(() => []),
+          api.get("/applications").catch(() => [])
+        ]);
+
+        const resumes: any[] = resumesData || [];
+        const recs: any[] = recsData || [];
+        const apps: any[] = appsData || [];
+        
+        let latest = null;
+        let totalVersionsCount = 0;
+        
+        if (resumes.length > 0) {
+          try {
+            const versions: any = await api.get(`/resumes/${resumes[0].id}/versions`) || [];
+            if (versions.length > 0) {
+              totalVersionsCount = versions.length;
+              versions.sort((a: any, b: any) => b.version_number - a.version_number);
+              latest = versions[0];
+            }
+          } catch (err) {
+            console.error("Failed to load resume versions", err);
+          }
+        }
+
+        const interviewsCount = apps.filter((a: any) => a.status === "Interview").length;
+
+        setStats({
+          resumes: totalVersionsCount > 0 ? totalVersionsCount : resumes.length,
+          recommendations: recs.length,
+          applications: apps.length,
+          interviews: interviewsCount
+        });
+        setLatestVersion(latest);
+      } catch (err) {
+        console.error("Error fetching dashboard data", err);
       }
-
-      const interviewsCount = apps.filter((a: any) => a.status === "Interview").length;
-
-      setStats({
-        resumes: totalVersionsCount > 0 ? totalVersionsCount : resumes.length,
-        recommendations: recs.length,
-        applications: apps.length,
-        interviews: interviewsCount
-      });
-      setLatestVersion(latest);
     };
 
     fetchDashboardData();
@@ -115,16 +121,20 @@ export default function Dashboard() {
               <div className="space-y-6">
                 <div className="flex items-center gap-6">
                   <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-full border-4 border-indigo-500 bg-indigo-950/20 text-2xl font-black text-indigo-400">
-                    {latestVersion.parsed_data?.quality_score}%
+                    {latestVersion.parsed_data?.quality_score != null 
+                      ? `${latestVersion.parsed_data.quality_score}%` 
+                      : '...'}
                   </div>
                   <div>
                     <h4 className="font-semibold text-white">ATS Compatibility Score</h4>
                     <p className="text-xs text-zinc-500 mt-1">
-                      Based on keyword density, standard layout schema, and clean headings.
+                      {latestVersion.parsed_data?.quality_score != null
+                        ? "Based on keyword density, standard layout schema, and clean headings."
+                        : "Processing your resume data... please wait or refresh shortly."}
                     </p>
                     <div className="mt-2 h-2.5 w-48 rounded-full bg-zinc-800 overflow-hidden">
                       <div 
-                        className="h-full bg-indigo-500" 
+                        className="h-full bg-indigo-500 transition-all duration-500" 
                         style={{ width: `${latestVersion.parsed_data?.ats_score || 0}%` }}
                       />
                     </div>
@@ -134,12 +144,26 @@ export default function Dashboard() {
                 <div className="space-y-2">
                   <span className="text-xs font-semibold text-zinc-400">Key Suggestions:</span>
                   <ul className="space-y-1.5">
-                    {latestVersion.parsed_data?.suggestions?.slice(0, 3).map((s: string, idx: number) => (
-                      <li key={idx} className="flex gap-2 text-xs text-zinc-300">
-                        <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                        <span>{s}</span>
+                    {latestVersion.parsed_data?.suggestions && latestVersion.parsed_data.suggestions.length > 0 ? (
+                      latestVersion.parsed_data.suggestions.slice(0, 3).map((s: string, idx: number) => {
+                        const isError = s.toLowerCase().includes("failed") || s.toLowerCase().includes("error");
+                        return (
+                          <li key={idx} className="flex gap-2 text-xs text-zinc-300">
+                            {isError ? (
+                              <HelpCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                            )}
+                            <span className={isError ? "text-red-400" : ""}>{s}</span>
+                          </li>
+                        );
+                      })
+                    ) : (
+                      <li className="flex gap-2 text-xs text-zinc-300 items-center">
+                        <Clock className="h-4 w-4 text-zinc-500 shrink-0" />
+                        <span>Analyzing resume...</span>
                       </li>
-                    )) || <li>No suggestions generated yet.</li>}
+                    )}
                   </ul>
                 </div>
               </div>
