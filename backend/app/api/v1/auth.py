@@ -141,10 +141,9 @@ async def google_oauth(payload: GoogleLogin, db: AsyncSession = Depends(get_db))
     refresh_token = create_refresh_token(user.id)
     
     # Store refresh token in Auth DB record
-    google_auth = next((a for a in user.auth_accounts if a.provider == "google"), None)
+    google_auth = await user_repo.get_oauth_account(db, provider="google", provider_id=provider_id)
     if not google_auth:
         google_auth = await user_repo.create_oauth_account(db, user_id=user.id, provider="google", provider_id=provider_id)
-        user.auth_accounts.append(google_auth)
         
     decoded = jwt.decode(refresh_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     jti = decoded.get("jti")
