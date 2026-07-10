@@ -128,7 +128,8 @@ def _quality_score(parsed_json: Dict[str, Any], raw_text: str) -> Tuple[Optional
     certs      = parsed_json.get("certifications") or []
     summary    = parsed_json.get("summary") or parsed_json.get("objective") or ""
 
-    points = 0.0
+    # Start with a base score of 10 to align with market average scoring
+    points = 10.0
 
     # Contact signal — heuristic on raw text
     if re.search(r"[\w.\-+]+@[\w.\-]+\.[a-z]{2,}", raw_text, re.I):
@@ -143,7 +144,7 @@ def _quality_score(parsed_json: Dict[str, Any], raw_text: str) -> Tuple[Optional
     if exp_count >= 2:
         points += _QUALITY_RUBRIC["experience_count"]
     elif exp_count == 1:
-        points += _QUALITY_RUBRIC["experience_count"] * 0.5
+        points += _QUALITY_RUBRIC["experience_count"] * 0.6
 
     # Experience bullets / description richness
     desc_fields = ("description", "responsibilities", "achievements", "bullets")
@@ -164,9 +165,9 @@ def _quality_score(parsed_json: Dict[str, Any], raw_text: str) -> Tuple[Optional
     if skill_count >= 8:
         points += _QUALITY_RUBRIC["skills_count"]
     elif skill_count >= 4:
-        points += _QUALITY_RUBRIC["skills_count"] * 0.5
+        points += _QUALITY_RUBRIC["skills_count"] * 0.6
     elif skill_count > 0:
-        points += _QUALITY_RUBRIC["skills_count"] * 0.25
+        points += _QUALITY_RUBRIC["skills_count"] * 0.3
 
     # Projects
     if len(projects) >= 1:
@@ -263,6 +264,10 @@ def _ats_score(parsed_json: Dict[str, Any], raw_text: str) -> Tuple[Optional[flo
         titled = sum(1 for e in experience if isinstance(e, dict) and e.get("title"))
         ratio = titled / len(experience)
         points += _ATS_RUBRIC["job_title_clarity"] * ratio
+
+    # Apply a strictness multiplier (0.9) to simulate real-world ATS parse failures
+    # This aligns the score more closely with industry standard tools like Enhancv.
+    points = points * 0.9
 
     return round(min(points, 100.0), 1), None
 
