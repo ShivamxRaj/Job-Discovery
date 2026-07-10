@@ -40,18 +40,13 @@ export default function Login() {
   };
 
   useEffect(() => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      console.warn("NEXT_PUBLIC_GOOGLE_CLIENT_ID is not configured.");
-      return;
-    }
-
     // Load Google script dynamically
     const script = document.createElement("script");
     script.src = "https://accounts.google.com/gsi/client";
     script.async = true;
     script.defer = true;
     script.onload = () => {
+      const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "placeholder-google-client-id";
       if ((window as any).google) {
         (window as any).google.accounts.id.initialize({
           client_id: clientId,
@@ -60,11 +55,11 @@ export default function Login() {
         (window as any).google.accounts.id.renderButton(
           document.getElementById("google-signin-btn"),
           {
-            theme: "filled_black",
+            theme: "outline",
             size: "large",
             width: 382,
             text: "signin_with",
-            shape: "pill",
+            shape: "rectangular",
           }
         );
       }
@@ -183,18 +178,8 @@ export default function Login() {
           </div>
 
           {/* Google SSO Button Container */}
-          <div className="flex flex-col items-center justify-center space-y-3">
+          <div className="flex flex-col items-center justify-center">
             <div id="google-signin-btn" className="w-full min-h-[40px] flex justify-center"></div>
-            
-            {/* Local dev bypass fallback (visible when Client ID is missing) */}
-            {!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID && (
-              <button
-                onClick={triggerMockGoogleLogin}
-                className="text-xs text-zinc-500 hover:text-indigo-400 hover:underline transition-colors mt-2"
-              >
-                ⚡ Dev Fallback: Quick Login with Mock Google Account
-              </button>
-            )}
           </div>
         </div>
       </div>
