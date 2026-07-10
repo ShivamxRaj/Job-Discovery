@@ -191,7 +191,18 @@ class MatchingService:
             scored_jobs.append({
                 "job": job,
                 "score": round(final_score * 100, 2),
-                "category": job_category
+                "category": job_category,
+                "components": {
+                    "skills": round(skill_score * 100),
+                    "experience": round(experience_score * 100),
+                    "salary": round(salary_score * 100),
+                    "location": round(location_score * 100),
+                    "remote": round(remote_score * 100),
+                    "freshness": round(freshness_score * 100),
+                    "role": round(category_score * 100)
+                },
+                "matched_skills": list(matching_skills) if job_skills else [],
+                "missing_skills": list(job_skills - user_skills) if job_skills else []
             })
 
         # Sort jobs by final score descending
@@ -225,11 +236,10 @@ class MatchingService:
 
         top_20 = diverse_scored_jobs[:20]
 
-        # 6. Phase 3: Match Explanation (Retrieve Top TOP_K recommendations)
+        # 6. Phase 3: Match Explanation & Validation Gate
         final_recommendations = []
-        resume_summary = f"Skills: {', '.join(user_skills)}. Experience: {[e.get('title') for e in version.parsed_data.parsed_json.get('experience', [])]}"
-        
         top_k_jobs = top_20[:TOP_K]
+        import json
 
         for item in top_k_jobs:
             job_obj = item["job"]
@@ -241,19 +251,60 @@ class MatchingService:
                 final_recommendations.append(existing)
                 continue
 
-            # Generate natural language match explanation
-            job_summary = f"Title: {job_obj.title} at {job_obj.company.name}. Description: {job_obj.description}"
-            explanation = await openai_service.explain_match(resume_summary, job_summary)
+            # Phase 1: Recommendation Quality Validation (Highest Priority)
+            job_cat_conf = job_obj.category_confidence or 0.5
+            resume_quality = (version.parsed_data.quality_score or 50.0) / 100.0 if version.parsed_data else 0.5
+            skill_conf = min(job_cat_conf, resume_quality)
+            
+            salary_conf = job_obj.salary_confidence
+            location_conf = job_obj.location_confidence
+            
+            # Confidence Thresholds
+            # Skill Confidence: >=0.90 (High), 0.75-0.89 (Medium), <0.75 (Low)
+            # Salary Confidence: >=0.80
+            # Location Confidence: >=0.80
+            
+            is_valid = True
+            if skill_conf < 0.75 or salary_conf < 0.80 or location_conf < 0.80:
+                is_valid = False
+            if not job_obj.is_active or job_obj.embedding_status != "COMPLETED":
+                is_valid = False
+                
+            evidence_confidence = "Low"
+            if is_valid:
+                if skill_conf >= 0.90:
+                    evidence_confidence = "High"
+                else:
+                    evidence_confidence = "Medium"
+
+            # Phase 2: Explainable Recommendations (Structured Output)
+            # Per Performance Budget constraint, no synchronous LLM call allowed here.
+            explanation_data = {
+                "is_explainable": is_valid,
+                "evidence_confidence": evidence_confidence,
+                "overall_score": score,
+                "components": item["components"],
+                "matched_skills": item["matched_skills"],
+                "missing_skills": [],
+                "ai_summary": None
+            }
+            
+            # Missing skills (only when extraction confidence is above threshold)
+            if is_valid and skill_conf >= 0.90:
+                explanation_data["missing_skills"] = item["missing_skills"]
+
+            explanation_json = json.dumps(explanation_data)
 
             rec_dict = {
                 "user_id": user_id,
                 "job_id": job_obj.id,
                 "resume_version_id": resume_version_id,
                 "score": score,
-                "explanation": explanation,
+                "explanation": explanation_json,
                 "is_saved": False,
                 "is_dismissed": False
             }
+            
             # Save to database
             recs_objs = await application_repo.save_recommendations(db, [rec_dict])
             final_recommendations.append(recs_objs[0])

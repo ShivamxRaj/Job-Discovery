@@ -205,14 +205,95 @@ export default function RecommendedJobs() {
               </p>
 
               {/* Explanations Section */}
-              <div className="rounded-xl border border-indigo-950 bg-indigo-950/10 p-4 border-dashed">
-                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block mb-1">
-                  AI Recommendation Review
-                </span>
-                <p className="text-xs text-zinc-300 leading-relaxed italic pr-4">
-                  "{rec.explanation}"
-                </p>
-              </div>
+              {(() => {
+                let expData = null;
+                try { expData = JSON.parse(rec.explanation); } catch (e) {}
+
+                if (expData) {
+                  return (
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
+                      {!expData.is_explainable ? (
+                        <div className="text-xs text-zinc-500 italic flex items-center justify-between">
+                          <span>Explainability disabled due to low data validation confidence.</span>
+                          <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-red-950/50 text-red-400">
+                            Confidence: {expData.evidence_confidence}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">
+                              Structured Evidence
+                            </span>
+                            <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${expData.evidence_confidence === 'High' ? 'bg-green-950/50 text-green-400' : 'bg-yellow-950/50 text-yellow-400'}`}>
+                              {expData.evidence_confidence} Confidence
+                            </span>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+                            <div className="bg-zinc-950 p-2 rounded border border-zinc-800/50">
+                               <span className="text-zinc-500 block text-[10px]">Role Match</span>
+                               <span className="text-white font-medium">{expData.components?.role || 0}%</span>
+                            </div>
+                            <div className="bg-zinc-950 p-2 rounded border border-zinc-800/50">
+                               <span className="text-zinc-500 block text-[10px]">Skills</span>
+                               <span className="text-white font-medium">{expData.components?.skills || 0}%</span>
+                            </div>
+                            <div className="bg-zinc-950 p-2 rounded border border-zinc-800/50">
+                               <span className="text-zinc-500 block text-[10px]">Experience</span>
+                               <span className="text-white font-medium">{expData.components?.experience || 0}%</span>
+                            </div>
+                            <div className="bg-zinc-950 p-2 rounded border border-zinc-800/50">
+                               <span className="text-zinc-500 block text-[10px]">Location</span>
+                               <span className="text-white font-medium">{expData.components?.location || 0}%</span>
+                            </div>
+                            <div className="bg-zinc-950 p-2 rounded border border-zinc-800/50">
+                               <span className="text-zinc-500 block text-[10px]">Salary</span>
+                               <span className="text-white font-medium">{expData.components?.salary || 0}%</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex flex-col gap-3">
+                            {expData.matched_skills && expData.matched_skills.length > 0 && (
+                              <div>
+                                <span className="text-zinc-500 text-[10px] uppercase block mb-1.5">Matched Skills</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {expData.matched_skills.map((s: string, i: number) => (
+                                    <span key={i} className="bg-indigo-950/40 text-indigo-300 border border-indigo-900/50 px-2 py-0.5 rounded text-[10px] font-medium">{s}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {expData.missing_skills && expData.missing_skills.length > 0 && (
+                              <div>
+                                <span className="text-zinc-500 text-[10px] uppercase block mb-1.5">Missing Skills</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {expData.missing_skills.map((s: string, i: number) => (
+                                    <span key={i} className="bg-red-950/20 text-red-300 border border-red-900/30 px-2 py-0.5 rounded text-[10px] font-medium">{s}</span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // Fallback for old string-based explanations
+                return (
+                  <div className="rounded-xl border border-indigo-950 bg-indigo-950/10 p-4 border-dashed">
+                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block mb-1">
+                      AI Recommendation Review
+                    </span>
+                    <p className="text-xs text-zinc-300 leading-relaxed italic pr-4">
+                      "{rec.explanation}"
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Auxiliary AI Resource Generators */}
               <div className="flex gap-4 border-t border-zinc-900 pt-4 mt-1 text-xs text-zinc-400">

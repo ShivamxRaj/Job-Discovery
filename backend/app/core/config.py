@@ -21,6 +21,8 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "https://localhost:3000",
         "https://localhost:8000",
+        "https://job-discovery-six.vercel.app",
+        "*"
     ]
 
     # Security & Auth

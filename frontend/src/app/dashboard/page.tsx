@@ -16,61 +16,62 @@ export default function Dashboard() {
   const [latestVersion, setLatestVersion] = useState<any>(null);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      // 1. Fetch user profile immediately for instant notification
-      api.get("/auth/me").then((currentUser: any) => {
-        if (!sessionStorage.getItem("welcomed") && currentUser) {
-          toast.success(`Welcome to JobDiscovery, ${currentUser.full_name || "User"}!`, {
-            description: "Your personalized job search command center.",
-            duration: 5000,
-          });
-          sessionStorage.setItem("welcomed", "true");
-        }
-      }).catch(err => console.error("Failed to load user profile", err));
-
-      // 2. Fetch all dashboard stats in parallel to drastically reduce load time
-      try {
-        const [resumesData, recsData, appsData] = await Promise.all([
-          api.get("/resumes").catch(() => []),
-          api.get("/jobs/recommendations").catch(() => []),
-          api.get("/applications").catch(() => [])
-        ]);
-
-        const resumes: any[] = resumesData || [];
-        const recs: any[] = recsData || [];
-        const apps: any[] = appsData || [];
-        
-        let latest = null;
-        let totalVersionsCount = 0;
-        
-        if (resumes.length > 0) {
-          try {
-            const versions: any = await api.get(`/resumes/${resumes[0].id}/versions`) || [];
-            if (versions.length > 0) {
-              totalVersionsCount = versions.length;
-              versions.sort((a: any, b: any) => b.version_number - a.version_number);
-              latest = versions[0];
-            }
-          } catch (err) {
-            console.error("Failed to load resume versions", err);
-          }
-        }
-
-        const interviewsCount = apps.filter((a: any) => a.status === "Interview").length;
-
-        setStats({
-          resumes: totalVersionsCount > 0 ? totalVersionsCount : resumes.length,
-          recommendations: recs.length,
-          applications: apps.length,
-          interviews: interviewsCount
+    // 1. Fetch user profile immediately for instant notification
+    api.get("/auth/me").then((currentUser: any) => {
+      if (!sessionStorage.getItem("welcomed") && currentUser) {
+        toast.success(`Welcome to JobDiscovery, ${currentUser.full_name || "User"}!`, {
+          description: "Your personalized job search command center.",
+          duration: 5000,
         });
-        setLatestVersion(latest);
-      } catch (err) {
-        console.error("Error fetching dashboard data", err);
+        sessionStorage.setItem("welcomed", "true");
       }
-    };
+    }).catch(err => console.error("Failed to load user profile", err));
 
-    fetchDashboardData();
+    // 2. Fetch Resumes (loads instantly)
+    api.get("/resumes").then(async (resumesData: any) => {
+      const resumes: any[] = resumesData || [];
+      let latest = null;
+      let totalVersionsCount = 0;
+      
+      if (resumes.length > 0) {
+        try {
+          const versions: any = await api.get(`/resumes/${resumes[0].id}/versions`) || [];
+          if (versions.length > 0) {
+            totalVersionsCount = versions.length;
+            versions.sort((a: any, b: any) => b.version_number - a.version_number);
+            latest = versions[0];
+          }
+        } catch (err) {
+          console.error("Failed to load resume versions", err);
+        }
+      }
+
+      setStats(prev => ({
+        ...prev,
+        resumes: totalVersionsCount > 0 ? totalVersionsCount : resumes.length
+      }));
+      setLatestVersion(latest);
+    }).catch(() => {});
+
+    // 3. Fetch Recommendations (this might take time due to AI matching)
+    api.get("/jobs/recommendations").then((recsData: any) => {
+      const recs: any[] = recsData || [];
+      setStats(prev => ({
+        ...prev,
+        recommendations: recs.length
+      }));
+    }).catch(() => {});
+
+    // 4. Fetch Applications (loads instantly)
+    api.get("/applications").then((appsData: any) => {
+      const apps: any[] = appsData || [];
+      const interviewsCount = apps.filter((a: any) => a.status === "Interview").length;
+      setStats(prev => ({
+        ...prev,
+        applications: apps.length,
+        interviews: interviewsCount
+      }));
+    }).catch(() => {});
   }, []);
 
   const cardItems = [
