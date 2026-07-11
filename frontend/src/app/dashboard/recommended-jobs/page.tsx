@@ -37,6 +37,7 @@ export default function RecommendedJobs() {
         const resumes: any = await api.get("/resumes");
         if (resumes.length > 0) {
           const vers: any = await api.get(`/resumes/${resumes[0].id}/versions`);
+          vers.sort((a: any, b: any) => b.version_number - a.version_number);
           setVersions(vers);
           if (vers.length > 0) {
             setSelectedVerId(vers[0].id);
@@ -141,7 +142,7 @@ export default function RecommendedJobs() {
             >
               {versions.map((ver) => (
                 <option key={ver.id} value={ver.id}>
-                  Version {ver.version_number} (ATS: {ver.parsed_data?.ats_score}%)
+                  Version {ver.version_number} (ATS: {ver.parsed_data?.ats_score != null ? `${ver.parsed_data.ats_score}%` : "N/A"})
                 </option>
               ))}
             </select>
@@ -200,9 +201,10 @@ export default function RecommendedJobs() {
               </div>
 
               {/* Description Snippet */}
-              <p className="text-xs text-zinc-500 leading-relaxed max-w-4xl line-clamp-2">
-                {rec.job.description}
-              </p>
+              <div 
+                className="text-xs text-zinc-500 leading-relaxed max-w-4xl line-clamp-2"
+                dangerouslySetInnerHTML={{ __html: rec.job.description || "" }}
+              />
 
               {/* Explanations Section */}
               {(() => {

@@ -137,7 +137,7 @@ export default function ResumeUpload() {
                 </div>
                 <div className="rounded-xl border border-zinc-850 bg-zinc-900/20 p-5 text-center flex flex-col items-center justify-center">
                   <span className="text-2xl font-black text-indigo-400">
-                    {result.parsed_data?.ats_score}%
+                    {result.parsed_data?.ats_score != null ? `${result.parsed_data.ats_score}%` : "N/A"}
                   </span>
                   <h4 className="text-sm font-bold text-white mt-1">ATS Compatibility Meter</h4>
                   <p className="text-xs text-zinc-500 mt-1">Keyword mapping and parser compliance checks.</p>

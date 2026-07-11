@@ -77,7 +77,7 @@ export default function ResumeHistory() {
                   <div className="flex justify-between items-start">
                     <span className="text-sm font-semibold text-white">Version {ver.version_number}</span>
                     <span className="rounded bg-indigo-950 border border-indigo-900 px-1.5 py-0.5 text-[10px] text-indigo-400 font-semibold">
-                      ATS: {ver.parsed_data?.ats_score}%
+                      ATS: {ver.parsed_data?.ats_score != null ? `${ver.parsed_data.ats_score}%` : "N/A"}
                     </span>
                   </div>
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-zinc-500">
@@ -117,7 +117,7 @@ export default function ResumeHistory() {
                   </div>
                   <div className="rounded-xl border border-zinc-855 bg-zinc-900/10 p-4">
                     <span className="text-xs font-semibold text-zinc-500 uppercase tracking-wider block">ATS Score</span>
-                    <span className="text-xl font-bold text-white mt-1 block">{selectedVersion.parsed_data?.ats_score}%</span>
+                    <span className="text-xl font-bold text-white mt-1 block">{selectedVersion.parsed_data?.ats_score != null ? `${selectedVersion.parsed_data.ats_score}%` : "N/A"}</span>
                   </div>
                 </div>
 

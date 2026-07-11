@@ -208,6 +208,9 @@ class MatchingService:
         # Sort jobs by final score descending
         scored_jobs.sort(key=lambda x: x["score"], reverse=True)
 
+        # Enforce minimum score threshold to prevent irrelevant jobs from surfacing
+        scored_jobs = [job for job in scored_jobs if job["score"] >= 20.0]
+
         # Apply greedy diversity re-ranking (company and category limits)
         diverse_scored_jobs = []
         company_counts = {}
@@ -253,8 +256,9 @@ class MatchingService:
 
             # Phase 1: Recommendation Quality Validation (Highest Priority)
             job_cat_conf = job_obj.category_confidence or 0.5
-            resume_quality = (version.parsed_data.quality_score or 50.0) / 100.0 if version.parsed_data else 0.5
-            skill_conf = min(job_cat_conf, resume_quality)
+            # Fix: Detach skill confidence from resume formatting quality.
+            # Rely on actual skill overlap percentage to determine if we can explain it.
+            skill_conf = max(item["components"]["skills"] / 100.0, 0.2)
             
             salary_conf = job_obj.salary_confidence
             location_conf = job_obj.location_confidence
