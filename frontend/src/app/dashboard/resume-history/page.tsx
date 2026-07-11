@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { FileText, Calendar, Eye, AlertCircle } from "lucide-react";
 import api from "@/lib/api";
 
+/**
+ * Displays uploaded resume history and detailed analysis for each version.
+ */
 export default function ResumeHistory() {
   const [resumes, setResumes] = useState<any[]>([]);
   const [versions, setVersions] = useState<any[]>([]);

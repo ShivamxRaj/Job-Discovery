@@ -4,6 +4,9 @@ import { useState } from "react";
 import { Upload, CheckCircle2, AlertCircle, FileText, ArrowRight } from "lucide-react";
 import api from "@/lib/api";
 
+/**
+ * Renders a resume upload form and displays parsing results, quality metrics, ATS compatibility, recommendations, and extracted skills.
+ */
 export default function ResumeUpload() {
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState("My Resume");

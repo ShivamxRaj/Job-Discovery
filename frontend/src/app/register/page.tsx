@@ -8,6 +8,11 @@ import api from "@/lib/api";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
+/**
+ * Renders the account registration page with email/password and Google sign-up options.
+ *
+ * @returns The registration page UI.
+ */
 export default function Register() {
   const router = useRouter();
   const [email, setEmail] = useState("");

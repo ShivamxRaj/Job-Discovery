@@ -11,7 +11,7 @@ echo " GSD ► Search Tools Setup"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# Check for ripgrep
+# check_ripgrep checks whether ripgrep is installed and reports its availability and version.
 check_ripgrep() {
     if command -v rg &> /dev/null; then
         echo "✅ ripgrep (rg) is installed: $(rg --version | head -n1)"
@@ -22,7 +22,7 @@ check_ripgrep() {
     fi
 }
 
-# Check for fd
+# check_fd checks whether fd or its fdfind executable is available and reports its version.
 check_fd() {
     if command -v fd &> /dev/null; then
         echo "✅ fd is installed: $(fd --version)"
@@ -36,7 +36,7 @@ check_fd() {
     fi
 }
 
-# Installation suggestions
+# suggest_install prints platform-specific installation instructions for ripgrep and fd.
 suggest_install() {
     echo ""
     echo "───────────────────────────────────────────────────────"

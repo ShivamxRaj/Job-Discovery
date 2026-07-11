@@ -20,6 +20,20 @@ class MatchingService:
         self, db: AsyncSession, user_id: int, resume_version_id: int
     ) -> List[JobRecommendation]:
         # 1. Retrieve the resume version and its embedding
+        """
+        Generate and persist ranked job recommendations for a user's resume version.
+        
+        Parameters:
+            db (AsyncSession): Database session used to retrieve and save matching data.
+            user_id (int): Identifier of the user receiving recommendations.
+            resume_version_id (int): Identifier of the resume version used for matching.
+        
+        Returns:
+            List[JobRecommendation]: Ranked job recommendations that pass scoring and validation.
+        
+        Raises:
+            ValueError: If the resume version or its vector embedding cannot be found.
+        """
         version = await resume_repo.get_version(db, resume_version_id)
         if not version or not version.embedding:
             raise ValueError("Resume version or its vector embedding not found")

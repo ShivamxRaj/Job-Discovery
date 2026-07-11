@@ -12,18 +12,12 @@ beta_logger.setLevel(logging.INFO)
 
 def log_event(event_name: str, user_id: int, details: dict = None):
     """
-    Log a behavioral event for Beta 0 runtime evidence collection.
+    Record a behavioral event with its associated user and optional details.
     
-    Expected events:
-    - Recommendation Viewed
-    - Recommendation Clicked
-    - Job Saved
-    - Apply Clicked
-    - Resume Uploaded
-    - Resume Parse Failed
-    - Recommendation Generated
-    - Explanation Displayed
-    - Explanation Hidden (confidence gate)
+    Parameters:
+        event_name (str): Name of the event to record.
+        user_id (int): Identifier of the user associated with the event.
+        details (dict, optional): Additional event data. Defaults to an empty dictionary.
     """
     event_payload = {
         "event": event_name,

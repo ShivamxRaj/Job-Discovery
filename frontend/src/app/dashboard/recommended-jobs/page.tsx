@@ -4,6 +4,11 @@ import { useEffect, useState } from "react";
 import { Sparkles, Bookmark, Eye, Mail, FileText, CheckCircle, ExternalLink, X } from "lucide-react";
 import api from "@/lib/api";
 
+/**
+ * Displays personalized job recommendations with resume selection and job-tracking actions.
+ *
+ * @returns The recommended jobs interface.
+ */
 export default function RecommendedJobs() {
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
